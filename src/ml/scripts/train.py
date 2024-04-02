@@ -21,11 +21,12 @@ sys.path.append(project_root)
 
 from ml.utils.constants import LOGGING_DIR, DATA_DIR, EXPERIMENTS_DIR
 from ml.engines.system import LitModel
-from ml.datasets.lookAtPointDataset.dataset import LookAtPointDataset
-from ml.datasets.lookAtPointDataset.datamodule import LookAtPointDataModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import LookAtPointDatasetMiddleLabel
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 from ml.models.model1 import TorchModel
+from ml.models.modelLSTMmiddleLabel import TorchModel
 
-model = LitModel(TorchModel())
+model = LitModel(TorchModel(input_size=2, hidden_size=64, num_classes=6))
 datamodule = LookAtPointDataModule(DATA_DIR)
 trainer = Trainer(logger = TensorBoardLogger(EXPERIMENTS_DIR))
 trainer.fit(model, datamodule)

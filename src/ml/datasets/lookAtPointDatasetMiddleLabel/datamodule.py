@@ -36,11 +36,11 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
 from torchvision import transforms
-import pytorch_lightning as pl
+from lightning.pytorch import LightningDataModule
 
 #from dataset import LookAtPointDataset
-from ml.datasets.lookAtPointDataset.dataset import LookAtPointDataset
-class LookAtPointDataModule(pl.LightningDataModule):
+from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import LookAtPointDatasetMiddleLabel
+class LookAtPointDataModule(LightningDataModule):
     def __init__(self, data_dir, batch_size=32, validation_split=0.2, num_workers=0):
         super().__init__()
         self.data_dir = data_dir
@@ -50,10 +50,11 @@ class LookAtPointDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         # Load dataset
-        dataset = LookAtPointDataset(self.data_dir, window_size=250, stride=1)
-
+        dataset = LookAtPointDatasetMiddleLabel(self.data_dir, window_size=250)
+        self.dataset = dataset
         # Calculate sizes of train/validation split
-        data_len = len(dataset)
+        data_len = len(dataset) 
+        print(data_len)
         val_size = int(data_len * self.validation_split)
         train_size = data_len - val_size
 
@@ -61,8 +62,7 @@ class LookAtPointDataModule(pl.LightningDataModule):
         self.train_dataset, self.val_dataset = random_split(dataset, [train_size, val_size])
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
-
+        return DataLoader(self.dataset, batch_size=64, shuffle=True)
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 

@@ -31,7 +31,7 @@ class TorchModel(torch.nn.Module):
     def __init__(self):
         super(TorchModel, self).__init__()
 
-        self.linear1 = torch.nn.Linear(2, 100)
+        self.linear1 = torch.nn.LazyLinear(100)
 
         self.linear2 = torch.nn.Linear(100, 50)
         self.linear3 = torch.nn.Linear(50, 6)
