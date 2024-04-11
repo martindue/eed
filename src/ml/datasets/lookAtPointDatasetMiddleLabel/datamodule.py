@@ -38,23 +38,45 @@ from torch.utils.data.dataset import random_split
 from torchvision import transforms
 from lightning.pytorch import LightningDataModule
 
-#from dataset import LookAtPointDataset
-from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import LookAtPointDatasetMiddleLabel
-class LookAtPointDataModule(LightningDataModule):
-    def __init__(self, data_dir, batch_size=32, validation_split=0.2, num_workers=0):
+# from dataset import LookAtPointDataset
+from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import (
+    LookAtPointDatasetMiddleLabel,
+)
+
+
+class LookAtPointDataMiddleLabelModule(LightningDataModule):
+    def __init__(
+        self,
+        data_dir: str = "/home/martin/Documents/Exjobb/eed/.data/",
+        sklearn: bool = False,
+        batch_size: int = 32,
+        validation_split: float = 0.2,
+        num_workers: int = 0,
+        window_size: int = 250,
+        print_extractionTime: bool = False,
+
+    ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.validation_split = validation_split
         self.num_workers = num_workers
+        self.sklearn = sklearn
+        self.window_size = window_size
+        self.print_extractionTime = print_extractionTime
 
     def setup(self, stage=None):
         # Load dataset
-        dataset = LookAtPointDatasetMiddleLabel(self.data_dir, window_size=250)
+        dataset = LookAtPointDatasetMiddleLabel(self.data_dir, self.window_size, self.print_extractionTime)
         self.dataset = dataset
-        # Calculate sizes of train/validation split
-        data_len = len(dataset) 
+        print("sklearn:", self.sklearn)
+        data_len = len(dataset)
         print(data_len)
+        if self.sklearn:
+            print("Using sklearn")
+            self.batch_size = data_len
+
+        # Calculate sizes of train/validation split
         val_size = int(data_len * self.validation_split)
         train_size = data_len - val_size
 
@@ -62,45 +84,7 @@ class LookAtPointDataModule(LightningDataModule):
         self.train_dataset, self.val_dataset = random_split(dataset, [train_size, val_size])
 
     def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=64, shuffle=True)
+        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
+
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
-
-# Code to check that the data has been loaded correctly
-#data_dir = '/home/martin/Documents/Exjobb/eed/.data/raw'
-#batch_size = 32
-#validation_split = 0.2
-#num_workers = 4
-#
-#data_module = LookAtPointDataModule(data_dir, batch_size=batch_size, validation_split=validation_split, num_workers=num_workers)
-## Call setup method
-#data_module.setup()
-#
-## Check dataset sizes
-#print(f"Training dataset size: {len(data_module.train_dataset)}")
-#print(f"Validation dataset size: {len(data_module.val_dataset)}")
-#
-## Verify DataLoader creation
-#train_dataloader = data_module.train_dataloader()
-#val_dataloader = data_module.val_dataloader()
-#
-## Check sample batches
-#for batch_idx, (x_batch, y_batch, evt_batch) in enumerate(train_dataloader):
-#    print(f"Train Batch {batch_idx}:")
-#    print(f"  x: {x_batch}")
-#    print(f"  y: {y_batch}")
-#    print(f"  evt: {evt_batch}")
-#
-#    # Print a few batches for brevity
-#    if batch_idx >= 2:
-#        break
-#
-#for batch_idx, (x_batch, y_batch, evt_batch) in enumerate(val_dataloader):
-#    print(f"Validation Batch {batch_idx}:")
-#    print(f"  x: {x_batch}")
-#    print(f"  y: {y_batch}")
-#    print(f"  evt: {evt_batch}")
-#
-#    # Print a few batches for brevity
-#    if batch_idx >= 2:
-#        break

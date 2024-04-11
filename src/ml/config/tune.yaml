@@ -1,0 +1,62 @@
+data:
+  data_dir: /home/martin/Documents/Exjobb/eed/.data
+  batch_size: 32
+  validation_split: 0.2
+  num_workers: 15
+model:
+  model:
+    class_path: ml.models.modelLSTMmiddleLabel.TorchModel
+    init_args:
+      input_size: 2
+      hidden_size: 128
+      num_classes: 6
+  optimizer: torch.optim.Adam
+  scheduler: torch.optim.lr_scheduler.ConstantLR
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: auto
+  num_nodes: 1
+  precision: null
+  logger: 
+    class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: /home/martin/Documents/Exjobb/eed/.experiments/sweeps
+      name: testSweep
+      log_graph: false
+      default_hp_metric: true
+  callbacks: null
+  fast_dev_run: false
+  max_epochs: 1
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: null
+  log_every_n_steps: null
+  enable_checkpointing: null
+  enable_progress_bar: null
+  enable_model_summary: null
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  deterministic: null
+  benchmark: null
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: null
+n_trials: 50
+study_name: testSweep

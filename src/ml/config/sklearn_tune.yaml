@@ -1,0 +1,8 @@
+data:
+  data_dir: /home/martin/Documents/Exjobb/eed/.data/
+  sklearn: true
+  batch_size: 32
+  validation_split: 0.2
+  num_workers: 8
+study_name: TestSweepSklearn
+n_trials: 20

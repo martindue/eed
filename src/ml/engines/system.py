@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class LitModel(pl.LightningModule):
+class LitModule(pl.LightningModule):
     def __init__(self, model):
         super().__init__()
         self.model = model
@@ -23,19 +23,21 @@ class LitModel(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters())
 """
-#import pytorch_lightning
+# import pytorch_lightning
 from lightning.pytorch import LightningModule
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LitModel(LightningModule):
-    def __init__(self, 
-                 model: nn.Module,
-                 optimizer: pl.cli.OptimizerCallable = torch.optim.Adam,
-                 scheduler: pl.cli.LRSchedulerCallable = torch.optim.lr_scheduler.ConstantLR,
-                 ) -> None:
+
+class LitModule(LightningModule):
+    def __init__(
+        self,
+        model: nn.Module,
+        optimizer: pl.cli.OptimizerCallable = torch.optim.Adam,
+        scheduler: pl.cli.LRSchedulerCallable = torch.optim.lr_scheduler.ConstantLR,
+    ) -> None:
         """
         Initializes the LightningModule with the provided model.
 
@@ -48,7 +50,7 @@ class LitModel(LightningModule):
         print("optimizer: ", optimizer)
         self.optimizer = optimizer
         self.scheduler = scheduler
-        
+
     def training_step(self, batch, batch_idx):
         """
         Defines the training step.
@@ -60,13 +62,19 @@ class LitModel(LightningModule):
         Returns:
             The loss tensor for the current batch.
         """
-        x, y = batch
 
-        y_hat = self(x)
+        print("Current device:", self.device)
+        features, y = batch
+
+        input = torch.stack([features[feature].float() for feature in features], dim=1)
+        y = y.float()
+
+        y_hat = self(input)
+
         loss = torch.nn.functional.cross_entropy(y_hat, y)
-        self.log('train_loss', loss)
+        self.log("train_loss", loss)
         return loss
-    
+
     def forward(self, x):
         """
         Defines the forward pass of the model.

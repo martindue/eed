@@ -1,20 +1,29 @@
 import os, sys
+import cProfile
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))  # Assuming the project root is two directories above src
+project_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
 
 # main.py
 from lightning.pytorch.cli import LightningCLI
-from ml.engines.system import LitModel
+from ml.engines.system import LitModule
 from ml.models.modelLSTMmiddleLabel import TorchModel
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
+)
+
 # Add the project root directory to the Python path
 
+
 def main():
-    class LightningLitModel(LightningCLI):
+    class LightningLitModule(LightningCLI):
         pass
-    cli = LightningLitModel(LitModel ,LookAtPointDataModule)
+
+    cli = LightningLitModule(LitModule, LookAtPointDataMiddleLabelModule)
+
 
 if __name__ == "__main__":
     main()

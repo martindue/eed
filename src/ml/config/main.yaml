@@ -6,10 +6,24 @@ trainer:
   devices: auto
   num_nodes: 1
   precision: null
-  logger: null
+  logger:
+    class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: /home/martin/Documents/Exjobb/eed/.experiments/logs2
+      name: EED
+      version: null
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+      sub_dir: null
+      comment: ''
+      purge_step: null
+      max_queue: 10
+      flush_secs: 120
+      filename_suffix: ''  
   callbacks: null
   fast_dev_run: false
-  max_epochs: null
+  max_epochs: 1
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -33,7 +47,7 @@ trainer:
   benchmark: null
   inference_mode: true
   use_distributed_sampler: true
-  profiler: null
+  profiler: simple
   detect_anomaly: false
   barebones: false
   plugins: null
@@ -42,11 +56,11 @@ trainer:
   default_root_dir: null
 model:
   model: 
-    class_path: ml.models.modelLSTMmiddleLabel.TorchModel
+    class_path: ml.models.simpleModel.TorchModel
     init_args:
-      input_size: 4
+      input_size: 2
       hidden_size: 128
-      num_classes: 7
+      num_classes: 6
   optimizer: torch.optim.Adam
   scheduler: torch.optim.lr_scheduler.ConstantLR
 data:
@@ -54,4 +68,6 @@ data:
   batch_size: 32
   validation_split: 0.2
   num_workers: 0
+  window_size: 250
+  print_extractionTime: true
 ckpt_path: null
