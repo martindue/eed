@@ -116,6 +116,14 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         center_window_data = self.data[center_window]
         post_window_data = self.data[post_window]
 
+        label, features = self.extract_features(center_window, pre_window_data, center_window_data, post_window_data)
+
+        toc = time.time()
+        if self.print_extractionTime:
+            print("Feature extraction took %.3f s." % (toc - tic))
+        return features, torch.tensor(label.values)
+
+    def extract_features(self, center_window, pre_window_data, center_window_data, post_window_data):
         pre_x_windowed = pre_window_data[:, 0]
         pre_y_windowed = pre_window_data[:, 1]
 
@@ -143,7 +151,6 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         ):
             # difference between positions of preceding and succeding windows,
             # aka tobii feature, together with data quality features and its variants
-
             features["mean-diff-%s" % d] = np.nanmean(dd[0]) - np.nanmean(dd[1])
             features["med-diff-%s" % d] = np.nanmedian(dd[0]) - np.nanmedian(dd[1])
 
@@ -194,8 +201,4 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         # rayleightest
         angl = np.arctan2(c_y_windowed, c_x_windowed)
         features["rayleightest"] = ast.rayleightest(angl)
-
-        toc = time.time()
-        if self.print_extractionTime:
-            print("Feature extraction took %.3f s." % (toc - tic))
-        return features, torch.tensor(label.values)
+        return label,features
