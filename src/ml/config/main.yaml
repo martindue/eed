@@ -23,7 +23,7 @@ trainer:
       filename_suffix: ''  
   callbacks: null
   fast_dev_run: false
-  max_epochs: 1
+  max_epochs: 3
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -67,7 +67,11 @@ data:
   data_dir: /home/martin/Documents/Exjobb/eed/.data
   batch_size: 32
   validation_split: 0.2
-  num_workers: 0
+  num_workers: 15
   window_size: 250
   print_extractionTime: true
+  max_presaved_epochs: 1
+  noise_levels:
+  - 0
+  - 0.1
 ckpt_path: null

@@ -25,7 +25,9 @@ from ml.datasets.lookAtPointDatasetNoWindow.datamodule import (
 )
 
 
-def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) -> float:
+def objective_function(
+    trial: optuna.trial.Trial, parser: ArgumentParser, args
+) -> float:
     data_module = LookAtPointDataModuleNoWindow(data_dir=args.data.data_dir)
     data_module.prepare_data()
     data_module.setup(stage="fit")
@@ -38,7 +40,9 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
 
     X = X.numpy()
     y = y.numpy()
-    X = np.nan_to_num(X, nan=0)  # placeholder for missing values TODO: change to something more sensible
+    X = np.nan_to_num(
+        X, nan=0
+    )  # placeholder for missing values TODO: change to something more sensible
     print("dimensions of X and y:", X.shape, y.shape)
 
     # classifier_name = trial.suggest_categorical('classifier', ['SVC', 'RandomForest'])
@@ -48,7 +52,9 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
         rf_config = {
             "n_estimators": trial.suggest_int("n_estimators", 8, 128),
             "max_depth": None,
-            "class_weight": trial.suggest_categorical("class_weight", ["balanced", "balanced_subsample"]),
+            "class_weight": trial.suggest_categorical(
+                "class_weight", ["balanced", "balanced_subsample"]
+            ),
             "max_features": trial.suggest_int("max_features", 1, 5),
             "n_jobs": args.data.num_workers,
             "verbose": 3,
@@ -57,7 +63,9 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
     else:
         pass
 
-    score = sklearn.model_selection.cross_val_score(classifier_obj, X, y, n_jobs=-1, cv=3)
+    score = sklearn.model_selection.cross_val_score(
+        classifier_obj, X, y, n_jobs=-1, cv=3
+    )
     accuracy = score.mean()
 
     return accuracy
@@ -66,7 +74,9 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
 def main():
     parser = ArgumentParser()
     parser.add_class_arguments(LookAtPointDataModuleNoWindow, "data")
-    parser.add_argument("log_dir", type=str, default="/home/martin/Documents/Exjobb/eed/.experiments")
+    parser.add_argument(
+        "log_dir", type=str, default="/home/martin/Documents/Exjobb/eed/.experiments"
+    )
     parser.add_argument("-c", "--config", action=ActionConfigFile)
     parser.add_argument("-n", "--study_name", default="TestSweep")
     parser.add_argument("-t", "--n_trials", default=100)
@@ -85,7 +95,9 @@ def main():
     storage_name = r"{}".format(storage_name)
     if Path(storage_name).exists():
         print(f"Load existing study {args.study_name}")
-        study = optuna.study.load_study(study_name=args.study_name, storage=storage_name)
+        study = optuna.study.load_study(
+            study_name=args.study_name, storage=storage_name
+        )
     else:
         study = optuna.create_study(
             study_name=args.study_name,

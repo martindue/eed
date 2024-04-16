@@ -62,12 +62,14 @@ class LitModule(LightningModule):
         Returns:
             The loss tensor for the current batch.
         """
-
-        print("Current device:", self.device)
-        features, y = batch
-
-        input = torch.stack([features[feature].float() for feature in features], dim=1)
-        y = y.float()
+        data = batch
+        features = data["features"]
+        y = data["label"]
+        # input = torch.stack(
+        #   [torch.from_numpy(features[feature]).float() for feature in features], dim=1
+        # )
+        input = features
+        # y = torch.FloatTensor(y)
 
         y_hat = self(input)
 

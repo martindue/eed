@@ -56,7 +56,9 @@ def main(
         )
     X = X.numpy()
     y = y.numpy()
-    X = np.nan_to_num(X, nan=0)  # placeholder for missing values TODO: change to something more sensible
+    X = np.nan_to_num(
+        X, nan=0
+    )  # placeholder for missing values TODO: change to something more sensible
     print("dimensions of X and y:", X.shape, y.shape)
     clf.fit(X, y)
     # print(data)

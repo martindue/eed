@@ -18,7 +18,9 @@ from ml.engines.system import LitModule
 from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 
 
-def objective_function(trial: optuna.trial.Trial, parser: LightningArgumentParser, args) -> float:
+def objective_function(
+    trial: optuna.trial.Trial, parser: LightningArgumentParser, args
+) -> float:
     hidden_size = trial.suggest_int("hidden_size", 64, 256, 64)
     args.model.model.init_args.hidden_size = hidden_size
 
@@ -59,7 +61,9 @@ def main():
     storage_name = r"{}".format(storage_name)
     if Path(storage_name).exists():
         print(f"Load existing study {args.study_name}")
-        study = optuna.study.load_study(study_name=args.study_name, storage=storage_name)
+        study = optuna.study.load_study(
+            study_name=args.study_name, storage=storage_name
+        )
     else:
         study = optuna.create_study(
             study_name=args.study_name,

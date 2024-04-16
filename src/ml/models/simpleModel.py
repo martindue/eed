@@ -3,7 +3,9 @@ import torch.nn.functional as F
 
 
 class TorchModel(torch.nn.Module):
-    def __init__(self, input_size: int = 3, hidden_size: int = 64, num_classes: int = 6):
+    def __init__(
+        self, input_size: int = 3, hidden_size: int = 64, num_classes: int = 6
+    ):
         super(TorchModel, self).__init__()
 
         self.linear1 = torch.nn.LazyLinear(100)

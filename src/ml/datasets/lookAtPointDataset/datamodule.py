@@ -80,13 +80,17 @@ class LookAtPointDataModule(LightningDataModule):
         train_size = data_len - val_size
 
         # Split dataset
-        self.train_dataset, self.val_dataset = random_split(dataset, [train_size, val_size])
+        self.train_dataset, self.val_dataset = random_split(
+            dataset, [train_size, val_size]
+        )
 
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(
+            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
 
 
 # #Code to check that the data has been loaded correctly

@@ -44,6 +44,43 @@ from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import (
 )
 
 
+def custom_collate_fn(batch):
+    pre_window_data = [item[0] for item in batch]
+    center_window_data = [item[1] for item in batch]
+    post_window_data = [item[2] for item in batch]
+    target = [item[3] for item in batch]
+
+    pre_data = np.array(pre_window_data)
+    center_data = np.array(center_window_data)
+    post_data = np.array(post_window_data)
+
+    features = extract_features_batchwise(pre_data, center_data, post_data)
+
+    return [features, target]
+
+
+def extract_features_batchwise(pre_data, center_data, post_data):
+    features = {}
+    features["mean-diff"] = np.hypot(
+        np.mean(post_data[:, 0], axis=1) - np.mean(pre_data[:, 0], axis=1),
+        np.mean(post_data[:, 1], axis=1) - np.mean(pre_data[:, 1], axis=1),
+    )
+    features["med-diff"] = np.hypot(
+        np.median(post_data[:, 0], axis=1) - np.median(pre_data[:, 0], axis=1),
+        np.median(post_data[:, 1], axis=1) - np.median(pre_data[:, 1], axis=1),
+    )
+
+    features["std-diff"] = np.hypot(
+        np.std(post_data[:, 0], axis=1), np.std(post_data[:, 1], axis=1)
+    ) - np.hypot(np.std(pre_data[:, 0], axis=1), np.std(pre_data[:, 1], axis=1))
+
+    features["std"] = np.hypot(
+        np.std(center_data[:, 0], axis=1), np.std(center_data[:, 1], axis=1)
+    )
+
+    return features
+
+
 class LookAtPointDataMiddleLabelModule(LightningDataModule):
     def __init__(
         self,
@@ -54,7 +91,8 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         num_workers: int = 0,
         window_size: int = 250,
         print_extractionTime: bool = False,
-
+        max_presaved_epochs: int = 99,
+        noise_levels: list = [0, 0.1],
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -64,10 +102,17 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         self.sklearn = sklearn
         self.window_size = window_size
         self.print_extractionTime = print_extractionTime
+        self.max_presaved_epochs = max_presaved_epochs
 
     def setup(self, stage=None):
         # Load dataset
-        dataset = LookAtPointDatasetMiddleLabel(self.data_dir, self.window_size, self.print_extractionTime)
+        dataset = LookAtPointDatasetMiddleLabel(
+            self.data_dir,
+            self.window_size,
+            self.print_extractionTime,
+            self.max_presaved_epochs,
+            self.trainer
+        )
         self.dataset = dataset
         print("sklearn:", self.sklearn)
         data_len = len(dataset)
@@ -81,10 +126,18 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         train_size = data_len - val_size
 
         # Split dataset
-        self.train_dataset, self.val_dataset = random_split(dataset, [train_size, val_size])
+        self.train_dataset, self.val_dataset = random_split(
+            dataset, [train_size, val_size]
+        )
 
     def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.dataset,  # collate_fn=custom_collate_fn,
+            batch_size=self.batch_size,
+            shuffle=True, 
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(
+            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
