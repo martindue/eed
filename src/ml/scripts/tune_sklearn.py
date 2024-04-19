@@ -20,23 +20,23 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 from ml.scripts.main_sklearn import main as main_sklearn
-from ml.datasets.lookAtPointDatasetNoWindow.datamodule import (
-    LookAtPointDataModuleNoWindow,
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
 )
 
 
 def objective_function(
     trial: optuna.trial.Trial, parser: ArgumentParser, args
 ) -> float:
-    data_module = LookAtPointDataModuleNoWindow(data_dir=args.data.data_dir)
+    data_module = LookAtPointDataMiddleLabelModule(data_dir=args.data.data_dir, sklearn=True)
     data_module.prepare_data()
     data_module.setup(stage="fit")
     data_loader = data_module.train_dataloader()
 
     for data in data_loader:
-        X = data["input"]
+        X = data["features"]
         X = X.squeeze()
-        y = data["evt"]
+        y = data["label"]
 
     X = X.numpy()
     y = y.numpy()
@@ -73,7 +73,7 @@ def objective_function(
 
 def main():
     parser = ArgumentParser()
-    parser.add_class_arguments(LookAtPointDataModuleNoWindow, "data")
+    parser.add_class_arguments(LookAtPointDataMiddleLabelModule, "data")
     parser.add_argument(
         "log_dir", type=str, default="/home/martin/Documents/Exjobb/eed/.experiments"
     )

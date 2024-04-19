@@ -20,6 +20,7 @@ from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestClassifier
 from lightning.pytorch import LightningDataModule
 import numpy as np
+import pandas as pd
 from typing import Type
 
 
@@ -38,12 +39,14 @@ def main(
 ):
     data_module.prepare_data()
     data_module.setup(stage=stage)
-    data_loader = data_module.train_dataloader()
+    train_data_loader = data_module.train_dataloader()
+    test_data_loader = data_module.test_dataloader()
 
-    for data in data_loader:
-        X = data["input"]
+    for data in train_data_loader:
+        X = data["features"]
         X = X.squeeze()
-        y = data["evt"]
+        y = data["label"]
+
 
     if classifier_type == RandomForestClassifier:
         clf = RandomForestClassifier(
@@ -63,6 +66,25 @@ def main(
     clf.fit(X, y)
     # print(data)
 
+    for data in test_data_loader: 
+        X_test = data["features"]
+        X_test = X_test.squeeze()
+        y_test = data["label"]
+        xx = data["x"]
+        yy = data["y"]
+        t = data["t"]
+        status = data["status"]
+    y_test = y_test.numpy()
+    X_test = X_test.numpy()
+
+
+
+    preds = clf.predict(X_test)
+    print("score is: ", clf.score(X_test, y_test))
+
+    output_df = pd.DataFrame({"t": t, "x": xx, "y": yy, "status": status, "evt": preds, "ground_truth": y_test})
+    
+    output_df.to_csv(".experiments/sklearn_output.csv", index=False)
 
 if __name__ == "__main__":
     CLI(main)

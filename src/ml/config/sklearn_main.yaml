@@ -1,5 +1,5 @@
 data_module:
-  class_path: ml.datasets.lookAtPointDatasetNoWindow.datamodule.LookAtPointDataModuleNoWindow
+  class_path: ml.datasets.lookAtPointDatasetMiddleLabel.datamodule.LookAtPointDataMiddleLabelModule
   init_args:
     data_dir: /home/martin/Documents/Exjobb/eed/.data/
     sklearn: true

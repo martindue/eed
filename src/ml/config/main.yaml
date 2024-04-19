@@ -21,9 +21,10 @@ trainer:
       max_queue: 10
       flush_secs: 120
       filename_suffix: ''  
-  callbacks: null
+  callbacks: 
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
   fast_dev_run: false
-  max_epochs: 3
+  max_epochs: 50
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -47,13 +48,13 @@ trainer:
   benchmark: null
   inference_mode: true
   use_distributed_sampler: true
-  profiler: simple
+  profiler: null
   detect_anomaly: false
   barebones: false
   plugins: null
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
-  default_root_dir: null
+  default_root_dir: /home/martin/Documents/Exjobb/eed/
 model:
   model: 
     class_path: ml.models.simpleModel.TorchModel
@@ -70,7 +71,7 @@ data:
   num_workers: 15
   window_size: 250
   print_extractionTime: true
-  max_presaved_epochs: 1
+  max_presaved_epochs: 49
   noise_levels:
   - 0
   - 0.1

@@ -103,15 +103,19 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         self.window_size = window_size
         self.print_extractionTime = print_extractionTime
         self.max_presaved_epochs = max_presaved_epochs
+        self.noise_levels = noise_levels
 
     def setup(self, stage=None):
         # Load dataset
         dataset = LookAtPointDatasetMiddleLabel(
-            self.data_dir,
-            self.window_size,
-            self.print_extractionTime,
-            self.max_presaved_epochs,
-            self.trainer
+            data_dir=self.data_dir,
+            long_window_size=self.window_size,
+            print_extractionTime=self.print_extractionTime,
+            max_presaved_epoch=self.max_presaved_epochs,
+            trainer=self.trainer,
+            noise_levels=self.noise_levels,
+            train=True,
+            sklearn=self.sklearn,
         )
         self.dataset = dataset
         print("sklearn:", self.sklearn)
@@ -129,10 +133,20 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         self.train_dataset, self.val_dataset = random_split(
             dataset, [train_size, val_size]
         )
+        self.test_dataset = LookAtPointDatasetMiddleLabel(
+            self.data_dir,
+            self.window_size,
+            self.print_extractionTime,
+            self.max_presaved_epochs,
+            self.trainer,
+            self.noise_levels,
+            train=False,
+            sklearn=self.sklearn
+        )
 
     def train_dataloader(self):
         return DataLoader(
-            self.dataset,  # collate_fn=custom_collate_fn,
+            self.train_dataset,  # collate_fn=custom_collate_fn,
             batch_size=self.batch_size,
             shuffle=True, 
         )
@@ -140,4 +154,9 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+        )
+    
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
         )

@@ -54,8 +54,12 @@ def calculate_bcea(x_windowed, y_windowed):
     return bcea
 
 
-def augment_data(data, noise_level=0.1):
+def add_normal_noise(data, noise_level=0.1):
     noise = np.random.normal(0, noise_level, data.shape)
+    return data + noise
+
+def add_uniform_noise(data, noise_level=0.1):
+    noise = np.random(-noise_level, noise_level, data.shape)
     return data + noise
 
 
@@ -64,23 +68,44 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self,
         data_dir: str = "/home/martin/Documents/Exjobb/eed/.data",
         long_window_size: int = 250,
-        print_extractionTime: bool = False,
+        print_extractionTime: bool = False, #TODO:remove
         max_presaved_epoch: int = 98,
         trainer: pl.Trainer = None,
+        noise_levels: list = [0, 0.1],
+        train: bool = True,
+        sklearn: bool = False,
     ):
+        self.noise_levels = noise_levels
         self.print_extractionTime = print_extractionTime
-        if print_extractionTime:
-            print("Extraction time is printed")
-        self.data_dir = data_dir
-        raw_dir = data_dir + "/raw"
+        self.data_dir = data_dir 
         self.max_presaved_epoch = max_presaved_epoch
         self.trainer = trainer
-        file_list = os.listdir(raw_dir)
-        print("Files in data directory:", file_list)
+        self.train = train
+        self.data = None
+        self.data_df = None
+        self.labels = None
+        self.pre_window_indices = None
+        self.center_window_indices = None
+        self.post_window_indices = None
+        self.presaved_features = None
+        self.sklearn = sklearn
+
+        self.load_data()
+        self.interpolate_nan_values()
+        self.setup_window_indices(long_window_size)
+        self.setup_augmented_data()
+
+    def load_data(self):
+        if self.train:
+            load_dir = os.path.join(self.data_dir, "raw/train_data")
+        else:
+            load_dir = os.path.join(self.data_dir, "raw/test_data")
+
+        file_list = os.listdir(load_dir)
         numpy_files = [f for f in file_list if f.endswith(".npy")]
         appended_df = None
         for idx, file_name in enumerate(numpy_files):
-            file_path = os.path.join(raw_dir, file_name)
+            file_path = os.path.join(load_dir, file_name)
             loaded_array = np.load(file_path)
             df = pd.DataFrame(loaded_array)
             df["file_index"] = idx
@@ -90,38 +115,28 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 appended_df = pd.concat((appended_df, df))
 
         appended_df = df  # Remove this line to use the full dataset.
-        print("Shape of data:", appended_df.shape)
-        print("Columns in data:", appended_df.columns)
-        print("head of appended_df: ", appended_df.head())
-        t = appended_df["t"]
-        x_data = appended_df["x"]
-        y_data = appended_df["y"]
-        status = appended_df["status"]
-        evt = appended_df["evt"]
-        labels = evt
+        self.data_df = appended_df
+        self.data = np.stack((appended_df["x"], appended_df["y"]), axis=-1)
+        self.labels = appended_df["evt"]
 
-        data = np.stack((x_data, y_data), axis=-1)
-
-        # Interpolate NaN values for each column separately. Placeholder.
-        for i in range(data.shape[1]):
-            nan_indices = np.isnan(data[:, i])
+    def interpolate_nan_values(self):
+        for i in range(self.data.shape[1]):
+            nan_indices = np.isnan(self.data[:, i])
             if np.any(nan_indices):
-                data[:, i][nan_indices] = np.interp(
+                self.data[:, i][nan_indices] = np.interp(
                     np.flatnonzero(nan_indices),
                     np.flatnonzero(~nan_indices),
-                    data[:, i][~nan_indices],
+                    self.data[:, i][~nan_indices],
                 )
-        self.data = data
-        self.labels = labels
+
+    def setup_window_indices(self,long_window_size: int):
         (
             self.pre_window_indices,
             self.center_window_indices,
             self.post_window_indices,
         ) = get_window_indices(
-            appended_df, {"window_size": long_window_size, "window_resolution": 1}
+            self.data_df, {"window_size": long_window_size, "window_resolution": 1}
         )
-        self.presaved_features = self.setup_augmented_data()
-
     def __len__(self):
         return len(self.center_window_indices)  # number of windows
 
@@ -140,7 +155,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             ):
                 print("Noise level ", noise_level)
                 # add noise and extract features
-                aug_data = augment_data(self.data, noise_level)
+                aug_data = add_normal_noise(self.data, noise_level)
                 appended_df = []
                 for idx in tqdm(
                     range(len(self.center_window_indices)), desc="Extracting features"
@@ -176,13 +191,11 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             else:
                 appended_df = pd.concat((appended_df, df))
 
-        presaved_features = appended_df
-
-        return presaved_features
-
+        self.presaved_features = appended_df
+        return
     def online_augmentation(self, idx, noise_level=0.1):
         print("Online augmentation")
-        data = augment_data(self.data, noise_level)
+        data = add_normal_noise(self.data, noise_level)
         pre_window = self.pre_window_indices[idx]
         center_window = self.center_window_indices[idx]
         post_window = self.post_window_indices[idx]
@@ -200,13 +213,14 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
     def __getitem__(self, idx):
         # for later epochs, perform online augmentation
-        if self.trainer.current_epoch >= self.max_presaved_epoch:
+        if not self.sklearn and self.trainer.current_epoch >= self.max_presaved_epoch:
             features_df = self.online_augmentation(idx)
             return {
                 "features": torch.squeeze(torch.tensor(
                     features_df.loc[:,features_df.columns != "label"].values, dtype=torch.float32
                 )),
                 "label": torch.squeeze(torch.tensor(features_df.loc[:,"label"], dtype=torch.long)),
+                "t": self.data_df.loc[idx,"t"], "x":self.data_df.loc[idx,"x"], "y": self.data_df.loc[idx,"y"], "status":self.data_df.loc[idx,"status"] 
             }
         else:
             return {
@@ -219,6 +233,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 "label": torch.tensor(
                     self.presaved_features.iloc[idx]["label"], dtype=torch.long
                 ),
+                "t": self.data_df.loc[idx,"t"], "x":self.data_df.loc[idx,"x"], "y": self.data_df.loc[idx,"y"], "status":self.data_df.loc[idx,"status"] 
             }
 
     def extract_features(

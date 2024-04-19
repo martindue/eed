@@ -3,6 +3,13 @@ data:
   sklearn: true
   batch_size: 32
   validation_split: 0.2
-  num_workers: 8
-study_name: TestSweepSklearn
+  num_workers: -1
+  window_size: 250
+  print_extractionTime: false
+  max_presaved_epochs: 99
+  noise_levels:
+  - 0
+  - 0.1
+log_dir: /home/martin/Documents/Exjobb/eed/.experiments
+study_name: TestSweep2
 n_trials: 20
