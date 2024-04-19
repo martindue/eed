@@ -10,6 +10,7 @@ from lightning.pytorch.cli import (
 )
 import sklearn.model_selection
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import LinearSVC
 from pathlib import Path
 from jsonargparse import ActionConfigFile, CLI, ArgumentParser
 import numpy as np
@@ -45,8 +46,8 @@ def objective_function(
     )  # placeholder for missing values TODO: change to something more sensible
     print("dimensions of X and y:", X.shape, y.shape)
 
-    # classifier_name = trial.suggest_categorical('classifier', ['SVC', 'RandomForest'])
-    classifier_name = "RandomForest"
+    classifier_name = trial.suggest_categorical('classifier', ['SVC', 'RandomForest'])
+    #classifier_name = "RandomForest"
     if classifier_name == "RandomForest":
         classifier_obj = RandomForestClassifier()
         rf_config = {
@@ -55,20 +56,24 @@ def objective_function(
             "class_weight": trial.suggest_categorical(
                 "class_weight", ["balanced", "balanced_subsample"]
             ),
-            "max_features": trial.suggest_int("max_features", 1, 5),
+            "max_features": trial.suggest_int("max_features", 1, 6),
             "n_jobs": args.data.num_workers,
             "verbose": 3,
         }
         classifier_obj.set_params(**rf_config)
+    elif classifier_name == "SVC":
+        svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
+        classifier_obj = LinearSVC(C=svc_c)
+    
     else:
-        pass
+        raise ValueError(f"Unknown classifier {classifier_name}")
 
     score = sklearn.model_selection.cross_val_score(
         classifier_obj, X, y, n_jobs=-1, cv=3
     )
-    accuracy = score.mean()
+    score = score.mean()
 
-    return accuracy
+    return score
 
 
 def main():
@@ -84,6 +89,7 @@ def main():
     args = parser.parse_args()
 
     log_path = Path(args.log_dir) / "sklearn_optuna_logs"
+    log_path.mkdir(parents=True, exist_ok=True)
     print(f"Logging to {log_path}")
 
     # Wrap the objective inside a lambda and call objective inside it
@@ -98,11 +104,11 @@ def main():
         study = optuna.study.load_study(
             study_name=args.study_name, storage=storage_name
         )
-    else:
+    else: 
         study = optuna.create_study(
             study_name=args.study_name,
             storage=storage_name,
-            direction="minimize",
+            direction="maximize",
             load_if_exists=True,
         )
 

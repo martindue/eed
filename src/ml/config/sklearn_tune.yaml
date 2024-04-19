@@ -11,5 +11,5 @@ data:
   - 0
   - 0.1
 log_dir: /home/martin/Documents/Exjobb/eed/.experiments
-study_name: TestSweep2
+study_name: TestSweep4
 n_trials: 20

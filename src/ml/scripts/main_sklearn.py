@@ -8,10 +8,7 @@ project_root = os.path.abspath(
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
-from ml.datasets.lookAtPointDatasetNoWindow.datamodule import (
-    LookAtPointDataModuleNoWindow,
-)
-from ml.datasets.lookAtPointDataset.datamodule import LookAtPointDataModule
+
 from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
     LookAtPointDataMiddleLabelModule,
 )
@@ -25,7 +22,7 @@ from typing import Type
 
 
 def main(
-    data_module: LightningDataModule = LookAtPointDataModule(),
+    data_module: LightningDataModule = LookAtPointDataMiddleLabelModule(),
     stage: str = "fit",
     classifier_type: Type[BaseEstimator] = RandomForestClassifier,
     rf_config: dict = {
