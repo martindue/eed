@@ -35,6 +35,17 @@ The code currently works with the 6 .npy files in this folder:  [https://github.
 They have to be placed into the folders *.data/raw/train_data* and *.data/raw/test_data/* which both need to be created. 
 
 I plan to add support for more [publicly available data](https://github.com/r-zemblys/EM-event-detection-evaluation?tab=readme-ov-file#list-of-publicly-available-annotated-eye-movement-datasets). 
+
+## Usage
+The program uses the lightningCLI and jsonargparse command line interfaces. 
+
+Running training:
+~~~bash  
+python src/ml/scripts/main.py fit --config src/ml/config/main.yaml
+~~~
+
+Many options and settings can be set in the config file.
+
 ## License  
 
 [MIT](https://choosealicense.com/licenses/mit/)
