@@ -15,7 +15,6 @@ from lightning.pytorch.cli import LightningCLI
 from jsonargparse import CLI
 
 
-
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )  # Assuming the project root is two directories above src
@@ -23,15 +22,19 @@ sys.path.append(project_root)
 
 
 from ml.engines.system import LitModule
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataMiddleLabelModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
+)
 
 
 def predict():
-    #chkpt = torch.load("/home/martin/Documents/Exjobb/eed/.experiments/logs2/EED/version_112/checkpoints/epoch=0-step=2013.ckpt")
-    #print(chkpt.keys())
+    # chkpt = torch.load("/home/martin/Documents/Exjobb/eed/.experiments/logs2/EED/version_112/checkpoints/epoch=0-step=2013.ckpt")
+    # print(chkpt.keys())
 
     litModule = LitModule()
-    model = LitModule.load_from_checkpoint("/home/martin/Documents/Exjobb/eed/.experiments/logs2/EED/version_112/checkpoints/epoch=0-step=2013.ckpt")
+    model = LitModule.load_from_checkpoint(
+        "/home/martin/Documents/Exjobb/eed/.experiments/logs2/EED/version_112/checkpoints/epoch=0-step=2013.ckpt"
+    )
     model.eval()
 
     data_module = LookAtPointDataMiddleLabelModule()
@@ -45,6 +48,7 @@ def predict():
         print(y_hat)
         print(y)
         break
+
 
 if __name__ == "__main__":
     CLI(predict)

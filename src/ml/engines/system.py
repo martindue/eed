@@ -53,7 +53,9 @@ class LitModule(LightningModule):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.testing_predictions = []
-        self.output_data = pd.DataFrame(columns=["t", "x", "y", "status", "evt", "ground_truth"])
+        self.output_data = pd.DataFrame(
+            columns=["t", "x", "y", "status", "evt", "ground_truth"]
+        )
 
     def training_step(self, batch, batch_idx):
         """
@@ -92,7 +94,7 @@ class LitModule(LightningModule):
         optimizer = self.optimizer(self.parameters())
         scheduler = self.scheduler(optimizer)
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
-    
+
     def _shared_eval_step(self, batch, batch_idx):
         data = batch
         input = data["features"]
@@ -117,7 +119,7 @@ class LitModule(LightningModule):
         loss = self._shared_eval_step(batch, batch_idx)
         self.log("val_loss", loss)
         return loss
-    
+
     def test_step(self, batch, batch_idx):
         """
         Defines the test step.
@@ -134,10 +136,8 @@ class LitModule(LightningModule):
         y = data["label"]
         t = data["t"]
         xx = data["x"]
-        yy  = data["y"]
+        yy = data["y"]
         status = data["status"]
-        
-
 
         input = features
 
@@ -145,17 +145,24 @@ class LitModule(LightningModule):
 
         evt = torch.argmax(y_hat, dim=1)
 
-
-        new_data = pd.DataFrame({"t": t.cpu(), "x": xx.cpu(), "y": yy.cpu(), "status": status.cpu(), "evt": evt.cpu(), "ground_truth": y.cpu()})
+        new_data = pd.DataFrame(
+            {
+                "t": t.cpu(),
+                "x": xx.cpu(),
+                "y": yy.cpu(),
+                "status": status.cpu(),
+                "evt": evt.cpu(),
+                "ground_truth": y.cpu(),
+            }
+        )
 
         self.output_data = pd.concat([self.output_data, new_data])
         self.testing_predictions.append(y_hat)
 
-
         loss = torch.nn.functional.cross_entropy(y_hat, y)
         self.log("test_loss", loss)
         return loss
-    
+
     def predict_step(self, batch, batch_idx, dataloader_idx):
         """
         Defines the predict step.
@@ -169,19 +176,20 @@ class LitModule(LightningModule):
             The predictions for the current batch.
         """
         data = batch
-        features = data["features"]
+        features = data["features"]  # TODO: remove t,x,y,status
 
         input = features
 
         y_hat = self(input)
 
         return y_hat
+
     def teardown(self, stage):
         if stage == "test":
-            #self.testing_predictions = torch.cat(self.testing_predictions, dim=0)
+            # self.testing_predictions = torch.cat(self.testing_predictions, dim=0)
             preds = torch.cat(self.testing_predictions, dim=0)
             number_encoded_preds = torch.argmax(preds, dim=1)
-            #print("testing_predictions: ", number_encoded_preds.tolist())
+            # print("testing_predictions: ", number_encoded_preds.tolist())
             print(self.output_data)
-            self.output_data.to_csv(".experiments/results/output_data.csv",index=False)
+            self.output_data.to_csv(".experiments/results/output_data.csv", index=False)
         return super().teardown(stage)

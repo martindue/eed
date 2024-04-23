@@ -29,7 +29,9 @@ from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
 def objective_function(
     trial: optuna.trial.Trial, parser: ArgumentParser, args
 ) -> float:
-    data_module = LookAtPointDataMiddleLabelModule(data_dir=args.data.data_dir, sklearn=True)
+    data_module = LookAtPointDataMiddleLabelModule(
+        data_dir=args.data.data_dir, sklearn=True
+    )
     data_module.prepare_data()
     data_module.setup(stage="fit")
     data_loader = data_module.train_dataloader()
@@ -46,12 +48,12 @@ def objective_function(
     )  # placeholder for missing values TODO: change to something more sensible
     print("dimensions of X and y:", X.shape, y.shape)
 
-    classifier_name = trial.suggest_categorical('classifier', ['SVC', 'RandomForest'])
-    #classifier_name = "RandomForest"
+    classifier_name = trial.suggest_categorical("classifier", ["SVC", "RandomForest"])
+    # classifier_name = "RandomForest"
     if classifier_name == "RandomForest":
         classifier_obj = RandomForestClassifier()
         rf_config = {
-            "n_estimators": trial.suggest_int("n_estimators", 8, 128),
+            "n_estimators": trial.suggest_int("n_estimators", 8, 48),
             "max_depth": None,
             "class_weight": trial.suggest_categorical(
                 "class_weight", ["balanced", "balanced_subsample"]
@@ -64,7 +66,7 @@ def objective_function(
     elif classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
         classifier_obj = LinearSVC(C=svc_c)
-    
+
     else:
         raise ValueError(f"Unknown classifier {classifier_name}")
 
@@ -104,7 +106,7 @@ def main():
         study = optuna.study.load_study(
             study_name=args.study_name, storage=storage_name
         )
-    else: 
+    else:
         study = optuna.create_study(
             study_name=args.study_name,
             storage=storage_name,

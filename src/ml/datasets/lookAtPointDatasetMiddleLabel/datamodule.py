@@ -92,7 +92,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         window_size: int = 250,
         print_extractionTime: bool = False,
         max_presaved_epochs: int = 99,
-        noise_levels: list = [0, 0.1],
+        noise_levels: list = [0],
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -141,21 +141,21 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             self.trainer,
             self.noise_levels,
             train=False,
-            sklearn=self.sklearn
+            sklearn=self.sklearn,
         )
 
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,  # collate_fn=custom_collate_fn,
             batch_size=self.batch_size,
-            shuffle=True, 
+            shuffle=True,
         )
 
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
         )
-    
+
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers

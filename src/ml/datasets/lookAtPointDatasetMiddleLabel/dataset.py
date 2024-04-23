@@ -58,6 +58,7 @@ def add_normal_noise(data, noise_level=0.1):
     noise = np.random.normal(0, noise_level, data.shape)
     return data + noise
 
+
 def add_uniform_noise(data, noise_level=0.1):
     noise = np.random(-noise_level, noise_level, data.shape)
     return data + noise
@@ -68,7 +69,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self,
         data_dir: str = "/home/martin/Documents/Exjobb/eed/.data",
         long_window_size: int = 250,
-        print_extractionTime: bool = False, #TODO:remove
+        print_extractionTime: bool = False,  # TODO:remove
         max_presaved_epoch: int = 98,
         trainer: pl.Trainer = None,
         noise_levels: list = [0, 0.1],
@@ -77,7 +78,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
     ):
         self.noise_levels = noise_levels
         self.print_extractionTime = print_extractionTime
-        self.data_dir = data_dir 
+        self.data_dir = data_dir
         self.max_presaved_epoch = max_presaved_epoch
         self.trainer = trainer
         self.train = train
@@ -88,6 +89,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self.center_window_indices = None
         self.post_window_indices = None
         self.presaved_features = None
+        self.file_names = []
         self.sklearn = sklearn
 
         self.load_data()
@@ -103,6 +105,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
         file_list = os.listdir(load_dir)
         numpy_files = [f for f in file_list if f.endswith(".npy")]
+        self.file_names = file_list
         appended_df = None
         for idx, file_name in enumerate(numpy_files):
             file_path = os.path.join(load_dir, file_name)
@@ -114,7 +117,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             else:
                 appended_df = pd.concat((appended_df, df))
 
-        appended_df = df  # Remove this line to use the full dataset.
+        # appended_df = df  # Remove this line to use the full dataset.
         self.data_df = appended_df
         self.data = np.stack((appended_df["x"], appended_df["y"]), axis=-1)
         self.labels = appended_df["evt"]
@@ -129,7 +132,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     self.data[:, i][~nan_indices],
                 )
 
-    def setup_window_indices(self,long_window_size: int):
+    def setup_window_indices(self, long_window_size: int):
         (
             self.pre_window_indices,
             self.center_window_indices,
@@ -137,6 +140,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         ) = get_window_indices(
             self.data_df, {"window_size": long_window_size, "window_resolution": 1}
         )
+
     def __len__(self):
         return len(self.center_window_indices)  # number of windows
 
@@ -156,7 +160,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 print("Noise level ", noise_level)
                 # add noise and extract features
                 aug_data = add_normal_noise(self.data, noise_level)
-                appended_df = []
+                dict_list = []
                 for idx in tqdm(
                     range(len(self.center_window_indices)), desc="Extracting features"
                 ):
@@ -172,8 +176,9 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                         center_window_data,
                         post_window_data,
                     )
-                    appended_df.append(features)
-                features_df = pd.DataFrame(appended_df)
+
+                    dict_list.append(features)
+                features_df = pd.DataFrame.from_records(dict_list)
                 # save augmentation as parquet
                 features_df.to_parquet(
                     os.path.join(
@@ -182,17 +187,18 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 )
 
         # load parquet files and append them to the original data
-        appended_df = None
+        df_list = None
         for file in os.listdir(aug_dir):
             file_path = os.path.join(aug_dir, file)
             df = pd.read_parquet(file_path)
-            if appended_df is None:
-                appended_df = df
+            if df_list is None:
+                df_list = df
             else:
-                appended_df = pd.concat((appended_df, df))
+                df_list = pd.concat((df_list, df))
 
-        self.presaved_features = appended_df
+        self.presaved_features = df_list
         return
+
     def online_augmentation(self, idx, noise_level=0.1):
         print("Online augmentation")
         data = add_normal_noise(self.data, noise_level)
@@ -216,24 +222,37 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         if not self.sklearn and self.trainer.current_epoch >= self.max_presaved_epoch:
             features_df = self.online_augmentation(idx)
             return {
-                "features": torch.squeeze(torch.tensor(
-                    features_df.loc[:,features_df.columns != "label"].values, dtype=torch.float32
-                )),
-                "label": torch.squeeze(torch.tensor(features_df.loc[:,"label"], dtype=torch.long)),
-                "t": self.data_df.loc[idx,"t"], "x":self.data_df.loc[idx,"x"], "y": self.data_df.loc[idx,"y"], "status":self.data_df.loc[idx,"status"] 
+                "features": torch.squeeze(
+                    torch.tensor(
+                        features_df.loc[:, features_df.columns != "label"].values,
+                        dtype=torch.float32,
+                    )
+                ),
+                "label": torch.squeeze(
+                    torch.tensor(features_df.loc[:, "label"], dtype=torch.long)
+                ),
+                "t": self.data_df.loc[idx, "t"],
+                "x": self.data_df.loc[idx, "x"],
+                "y": self.data_df.loc[idx, "y"],
+                "status": self.data_df.loc[idx, "status"],
+                "file_index": self.data_df.loc[idx, "file_index"],
+                "file_name": self.data_df.loc[idx, "file_name"],
             }
         else:
             return {
                 "features": torch.tensor(
-                    self.presaved_features.iloc[
-                        idx, self.presaved_features.columns != "label" 
-                    ],
+                    self.presaved_features.iloc[idx, 7:],
                     dtype=torch.float32,
                 ),
                 "label": torch.tensor(
-                    self.presaved_features.iloc[idx]["label"], dtype=torch.long
+                    self.presaved_features.iat[idx,4], dtype=torch.long
                 ),
-                "t": self.data_df.loc[idx,"t"], "x":self.data_df.loc[idx,"x"], "y": self.data_df.loc[idx,"y"], "status":self.data_df.loc[idx,"status"] 
+                "t": self.presaved_features.iat[idx,0],
+                "x": self.presaved_features.iat[idx,1],
+                "y": self.presaved_features.iat[idx,2],
+                "status": self.presaved_features.iat[idx,3],
+                "file_name": self.file_names[self.presaved_features.iat[idx,5]],
+                "file_index": self.presaved_features.iat[idx,5],
             }
 
     def extract_features(
@@ -252,10 +271,24 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
         middlePoint = (center_window.start + center_window.stop) // 2
 
-        label = self.labels[middlePoint]
-        # The label corresponds to the middle element in the center window
+        label = self.labels.values[
+            middlePoint
+        ]  # The label corresponds to the middle element in the center window
+
+        t = self.data_df.iat[middlePoint, 0]
+        x = self.data_df.iat[middlePoint, 1]
+        y = self.data_df.iat[middlePoint, 2]
+        status = self.data_df.iat[middlePoint, 3]
+        file_index = self.data_df.iat[middlePoint, 5]
 
         features = dict()
+
+        features["t"] = t  # 0
+        features["x"] = x  # 1
+        features["y"] = y  # 2
+        features["status"] = status  # 3
+        features["label"] = label  # 4
+        features["file_index"] = file_index  # 5
 
         fs = 1000  # TODO: Extract fs from timestamps in data.
         features["fs"] = fs
@@ -317,7 +350,6 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             np.hypot(np.diff(np.diff(c_x_windowed)), np.diff(np.diff(c_y_windowed)))
             * fs**2
         )
-        features["label"] = label
         # rayleightest
         angl = np.arctan2(c_y_windowed, c_x_windowed)
         features["rayleightest"] = ast.rayleightest(angl)
