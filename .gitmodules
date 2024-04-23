@@ -1,0 +1,3 @@
+[submodule "/home/martin/Documents/Exjobb/eed/src/eval"]
+	path = /home/martin/Documents/Exjobb/eed/src/eval
+	url = https://github.com/martindue/EM-event-detection-evaluation.git
