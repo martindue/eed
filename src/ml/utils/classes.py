@@ -20,5 +20,10 @@ class job:
             "ignore_undef",
         ]
         self.binary_strategy = binary_strategy or ["tn", "error", "ignore"]
-        self.event_map = event_map or {"1": 1, "2": 2, "4": 4, "0": 100} #TODO: This is wrong, for the lookAtPoint Dataset. Change to correct values
+        self.event_map = event_map or {
+            "1": 1,
+            "2": 2,
+            "4": 4,
+            "0": 100,
+        }  # TODO: This is wrong, for the lookAtPoint Dataset. Change to correct values
         self.label = label or "default_label"

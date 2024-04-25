@@ -9,8 +9,9 @@ datamodule = MyLightningDataModule()
 trainer = Trainer(logger = TensorBoardLogger(EXPERIMENTS_DIR))
 trainer.fit(model, data_module=datamodule)
 """
-import sys
 import os
+import sys
+
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -21,11 +22,12 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 
-from ml.utils.constants import LOGGING_DIR, DATA_DIR, EXPERIMENTS_DIR
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataModule
 from ml.engines.system import LitModule
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 from ml.models.model1 import TorchModel
 from ml.models.modelLSTMmiddleLabel import TorchModel
+from ml.utils.constants import DATA_DIR, EXPERIMENTS_DIR, LOGGING_DIR
 
 model = LitModule(TorchModel(input_size=2, hidden_size=64, num_classes=6))
 datamodule = LookAtPointDataModule(DATA_DIR)

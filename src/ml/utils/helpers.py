@@ -13,6 +13,7 @@ def vcorrcoef(X, Y):
     r_den = np.sqrt(np.sum(Xm**2) * np.sum(Ym**2))
     return r_num / r_den
 
+
 def impute_with_column_means(X):
     """
     Impute missing values in an array with the mean value of each column.

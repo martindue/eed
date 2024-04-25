@@ -1,5 +1,6 @@
-import os, sys
 import cProfile
+import os
+import sys
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
@@ -9,11 +10,11 @@ sys.path.append(project_root)
 
 # main.py
 from lightning.pytorch.cli import LightningCLI
+
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataMiddleLabelModule
 from ml.engines.system import LitModule
 from ml.models.modelLSTMmiddleLabel import TorchModel
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
-    LookAtPointDataMiddleLabelModule,
-)
 
 # Add the project root directory to the Python path
 

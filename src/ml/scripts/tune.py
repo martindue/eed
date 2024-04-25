@@ -1,21 +1,21 @@
-import optuna
-import os, sys
-import lightning.pytorch as lp
-from lightning.pytorch.cli import (
-    SaveConfigCallback,
-    LightningArgumentParser,
-    LightningCLI,
-)
+import os
+import sys
 from pathlib import Path
+
+import lightning.pytorch as lp
+import optuna
 from jsonargparse import ActionConfigFile
+from lightning.pytorch.cli import (LightningArgumentParser, LightningCLI,
+                                   SaveConfigCallback)
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataModule
 from ml.engines.system import LitModule
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 
 
 def objective_function(

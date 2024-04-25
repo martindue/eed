@@ -31,17 +31,17 @@ class MNISTDataModule(LightningDataModule):
         return DataLoader(self.mnist_predict, batch_size=self.batch_size)
 """
 import os
+
 import numpy as np
 import torch
+from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
 from torchvision import transforms
-from lightning.pytorch import LightningDataModule
 
 # from dataset import LookAtPointDataset
-from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import (
-    LookAtPointDatasetMiddleLabel,
-)
+from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import \
+    LookAtPointDatasetMiddleLabel
 
 
 def custom_collate_fn(batch):

@@ -23,13 +23,13 @@ class LitModule(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters())
 """
-# import pytorch_lightning
-from lightning.pytorch import LightningModule
 import lightning.pytorch as pl
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pandas as pd
+# import pytorch_lightning
+from lightning.pytorch import LightningModule
 
 
 class LitModule(LightningModule):

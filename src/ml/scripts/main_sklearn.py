@@ -1,7 +1,8 @@
 # https://git.smarteye.se/research/DepthSkeleton/-/blob/main/training/config/showData.yaml?ref_type=heads
 
 # https://git.smarteye.se/research/DepthSkeleton/-/blob/main/training/showData.py?ref_type=heads
-import os, sys
+import os
+import sys
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
@@ -9,25 +10,25 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
-    LookAtPointDataMiddleLabelModule,
-)
-from jsonargparse import CLI, ArgumentParser
-from sklearn.base import BaseEstimator
-from sklearn.ensemble import RandomForestClassifier
-from lightning.pytorch import LightningDataModule
+from collections import OrderedDict
+from itertools import chain
+from typing import Type
+
 import numpy as np
 import pandas as pd
-from itertools import chain
-from collections import OrderedDict
-from typing import Type
+from jsonargparse import CLI, ArgumentParser
+from lightning.pytorch import LightningDataModule
+from sklearn.base import BaseEstimator
+from sklearn.ensemble import RandomForestClassifier
+
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataMiddleLabelModule
 from ml.utils.helpers import impute_with_column_means
-
-import numpy as np
-
+from ml.utils.post_processing import post_process
 
 # Example usage:
 # X_imputed = impute_with_column_means(X)
+
 
 def fetch_data(data_loader):
     t = np.concatenate([batch["t"].numpy() for batch in data_loader], axis=0)
@@ -51,16 +52,16 @@ def fetch_data(data_loader):
 
     return pd_output_df
 
-def make_predictions_and_save(classifier, X,output_df, output_dir):
+
+def make_predictions_and_save(classifier, X, output_df, output_dir):
     # Make predictions
     y_pred = classifier.predict(X)
 
-    #get unique file names from output_df
+    # get unique file names from output_df
     unique_file_names = output_df["file_name"].unique()
 
-
     file_index = output_df["file_index"].values
-    gt_output_df = output_df.drop(columns=["file_index","file_name"])
+    gt_output_df = output_df.drop(columns=["file_index", "file_name"])
     unique_file_indices = output_df["file_index"].unique()
     print("unique_file_indices: ", unique_file_indices)
 
@@ -81,7 +82,9 @@ def make_predictions_and_save(classifier, X,output_df, output_dir):
         print(f"Saving predictions for {file_name} to {output_dir}...")
         pd_file_path = os.path.join(output_dir, f"{file_name}_pd.csv")
         pd_filtered_df.sort_values(by=["t"], inplace=True)
-        pd_filtered_df.to_csv(pd_file_path, index=False)
+        pd_pp_df = post_process(pd_filtered_df)
+
+        pd_filtered_df.to_csv(pd_pp_df, index=False)
 
         gt_file_path = os.path.join(output_dir, f"{file_name}_gt.csv")
         gt_filtered_df.sort_values(by=["t"], inplace=True)
@@ -119,7 +122,7 @@ def main(
     for batch in train_data_loader:
         X_train = batch["features"]
         y_train = batch["label"]
-        t =  batch["t"]
+        t = batch["t"]
         xx = batch["x"]
         yy = batch["y"]
         status = batch["status"]
@@ -136,7 +139,7 @@ def main(
             "file_name": file_name,
         }
     )
-    
+
     for batch in validation_data_loader:
         X_val = batch["features"]
         t = batch["t"]
@@ -155,17 +158,16 @@ def main(
             "status": status,
             "evt": y_val,
             "file_index": file_index,
-            "file_name": file_name, 
+            "file_name": file_name,
         }
     )
-    
+
     X_train = impute_with_column_means(X_train)
     X_val = impute_with_column_means(X_val)
 
     print("dimensions of X and y:", X_train.shape, y_train.shape)
     print("Fitting classifier.... ")
     clf.fit(X_train, y_train)
-
 
     # Make predictions and save them
     print("Predicting on train data....")

@@ -1,34 +1,40 @@
-import os, sys
+import os
+import sys
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from jsonargparse import ActionConfigFile, CLI, ArgumentParser
-
+from jsonargparse import CLI, ActionConfigFile, ArgumentParser
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
-from eval.misc import matching
-from eval.misc import eval_utils
-from ml.utils.classes import job
 import eval.misc.utils as utils
+from eval.misc import eval_utils, matching
+
+from ml.utils.classes import job
 
 
 def main():
     parser = ArgumentParser()
     parser.add_class_arguments(job, "jobs")
     parser.add_argument("-c", "--config", action=ActionConfigFile)
-    parser.add_argument("-o", "--output", type=str, default="/home/martin/Documents/Exjobb/eed/.experiments/plots", help="Output directory")
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="/home/martin/Documents/Exjobb/eed/.experiments/plots",
+        help="Output directory",
+    )
     args = parser.parse_args()
 
     # Define the path to the predictions and ground truths files
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", ".."))
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     odir = args.output
-    fpath_pr = '.experiments/results/sklearn/train/lookAtPoint_EL_S1_pd.csv'
-    fpath_gt = '.experiments/results/sklearn/train/lookAtPoint_EL_S1_gt.csv'
-    
+    fpath_pr = ".experiments/results/sklearn/validation/lookAtPoint_EL_S1_pd.csv"
+    fpath_gt = ".experiments/results/sklearn/validation/lookAtPoint_EL_S1_gt.csv"
+
     # Check if the files exist
     if not os.path.exists(fpath_pr) or not os.path.exists(fpath_gt):
         print("Error: Predictions or ground truths file not found.")
@@ -46,8 +52,6 @@ def main():
         # add undef label
         event_labels = [0, *event_labels]
 
-
-
     data_gt, data_pr = utils.load_data(fpath_gt, fpath_pr, event_map)
     event_labels = list(set(event_labels))
     event_matcher = matching.EventMatcher(gt=data_gt, pr=data_pr)
@@ -56,23 +60,17 @@ def main():
         matcher_label = filter(None, (matcher, job_label))
         matcher_label = {"matcher": "-".join(matcher_label)}
 
-
         match_plot_kwargs = jobs.get("match-plot-kwargs", None)
         kwargs = (
-            matching_kwargs
-            if isinstance(matching_kwargs, list)
-            else [matching_kwargs]
+            matching_kwargs if isinstance(matching_kwargs, list) else [matching_kwargs]
         )
         # add plot mode indicator
         _plot_mode = {"plot-mode": True}
-        kwargs = [
-            utils.merge_dicts([_kwargs, _plot_mode]) for _kwargs in kwargs
-        ]
+        kwargs = [utils.merge_dicts([_kwargs, _plot_mode]) for _kwargs in kwargs]
 
         # run matching
         _match_result = [
-            event_matcher.run_matching(matcher, **_kwargs)
-            for _kwargs in kwargs
+            event_matcher.run_matching(matcher, **_kwargs) for _kwargs in kwargs
         ]
         _, events = zip(*_match_result)
 

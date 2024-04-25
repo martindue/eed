@@ -8,12 +8,12 @@ datamodule = MyLightningDataModule()
 trainer = Trainer(logger = TensorBoardLogger(EXPERIMENTS_DIR))
 trainer.predict(model, data_module=datamodule)
 """
-import os, sys
+import os
+import sys
+
 import torch
-from lightning.pytorch.cli import LightningCLI
-
 from jsonargparse import CLI
-
+from lightning.pytorch.cli import LightningCLI
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
@@ -21,10 +21,9 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataMiddleLabelModule
 from ml.engines.system import LitModule
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
-    LookAtPointDataMiddleLabelModule,
-)
 
 
 def predict():

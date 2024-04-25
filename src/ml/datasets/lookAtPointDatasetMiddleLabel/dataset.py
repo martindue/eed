@@ -1,13 +1,14 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
-import pytorch_lightning as pl
-import numpy as np
-import os, time
-import pandas as pd
-import scipy.signal as sg
-import astropy.stats as ast
-from tqdm import tqdm
+import os
+import time
 
+import astropy.stats as ast
+import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
+import scipy.signal as sg
+import torch
+from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 x = os.path.dirname(__file__)
 from ...utils.helpers import vcorrcoef
@@ -27,10 +28,25 @@ def get_window_indices(data, window_params):
         indices = d.index.values
 
         onset = range(window_size, len(d) - window_size, window_stride)
-        post_idx = [slice(cumulative_index + indices[s], cumulative_index + indices[s + window_size - 1] + 1) for s in onset]
-        pre_idx = [slice(cumulative_index + indices[s - window_size], cumulative_index + indices[s - 1] + 1) for s in onset]
+        post_idx = [
+            slice(
+                cumulative_index + indices[s],
+                cumulative_index + indices[s + window_size - 1] + 1,
+            )
+            for s in onset
+        ]
+        pre_idx = [
+            slice(
+                cumulative_index + indices[s - window_size],
+                cumulative_index + indices[s - 1] + 1,
+            )
+            for s in onset
+        ]
         center_idx = [
-            slice(cumulative_index + indices[s - window_size // 2], cumulative_index + indices[s + window_size // 2] + 1)
+            slice(
+                cumulative_index + indices[s - window_size // 2],
+                cumulative_index + indices[s + window_size // 2] + 1,
+            )
             for s in onset
         ]
 

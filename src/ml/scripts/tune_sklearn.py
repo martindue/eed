@@ -1,39 +1,37 @@
 # TODO: Make this take in an arbitrary data module as set by config file
 
-import optuna
-import os, sys
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
 import lightning.pytorch as lp
-from lightning.pytorch.cli import (
-    SaveConfigCallback,
-    LightningArgumentParser,
-    LightningCLI,
-)
+import numpy as np
+import optuna
+import pandas as pd
 import sklearn.model_selection
+from jsonargparse import CLI, ActionConfigFile, ArgumentParser
+from lightning.pytorch.cli import (LightningArgumentParser, LightningCLI,
+                                   SaveConfigCallback)
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import LinearSVC
-from pathlib import Path
-from jsonargparse import ActionConfigFile, CLI, ArgumentParser
-import numpy as np
-import pandas as pd
-import json
-import time
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
-# from ml.scripts.main_sklearn import main as main_sklearn
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
-    LookAtPointDataMiddleLabelModule,
-)
-from ml.utils.helpers import impute_with_column_means
-from ml.utils.classes import job
-
 import eval.misc.utils as utils
-from eval.misc import matching
-from eval.misc import eval_utils
+from eval.misc import eval_utils, matching
 from funcy import omit
+
+# from ml.scripts.main_sklearn import main as main_sklearn
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
+    LookAtPointDataMiddleLabelModule
+from ml.utils.classes import job
+from ml.utils.helpers import impute_with_column_means
+
 
 def calculate_metrics(data_gt, data_pr, job):
     matchers = job.matchers
@@ -50,7 +48,7 @@ def calculate_metrics(data_gt, data_pr, job):
 
     event_labels = list(set(event_labels))
     event_matcher = matching.EventMatcher(gt=data_gt, pr=data_pr)
-    
+
     result_accum = []
     # run eval
     for matcher, matching_kwargs in matchers.items():
@@ -70,8 +68,6 @@ def calculate_metrics(data_gt, data_pr, job):
     return result_accum
 
 
-
-
 def objective_function(
     trial: optuna.trial.Trial, parser: ArgumentParser, args
 ) -> float:
@@ -83,19 +79,16 @@ def objective_function(
     train_data_loader = data_module.train_dataloader()
     val_data_loader = data_module.val_dataloader()
 
-
-
-
     for data in train_data_loader:
         X_train = data["features"]
         X_train = X_train.squeeze()
         y = data["label"]
     for data in val_data_loader:
-        X_val = data["features"]        
+        X_val = data["features"]
         X_val = X_val.squeeze()
-        val_data = pd.DataFrame(omit(data,["features"]))
+        val_data = pd.DataFrame(omit(data, ["features"]))
         y_df = val_data.filter(["t", "x", "y", "status", "label"])
-        y_df.rename(columns={'label': 'evt'}, inplace=True)
+        y_df.rename(columns={"label": "evt"}, inplace=True)
     print("Data loaded")
     X_train = X_train.numpy()
     y = y.numpy()
@@ -128,7 +121,6 @@ def objective_function(
     else:
         raise ValueError(f"Unknown classifier {classifier_name}")
 
-
     classifier_obj.fit(X_train, y)
 
     start_time = time.time()
@@ -143,10 +135,7 @@ def objective_function(
     # )
     # score = score.mean()
 
-    return scores[0]['mcc'], pred_time # return mcc score for multiclass all events
-
-
-
+    return scores[0]["mcc"], pred_time  # return mcc score for multiclass all events
 
 
 def main():
@@ -166,15 +155,14 @@ def main():
     log_path.mkdir(parents=True, exist_ok=True)
     print(f"Logging to {log_path}")
 
-    #jpath = utils.path2abs(args.job, root_repo)  # TODO: take this from config file.
-    #with open(jpath, "r") as f:
+    # jpath = utils.path2abs(args.job, root_repo)  # TODO: take this from config file.
+    # with open(jpath, "r") as f:
     #    jobs = json.load(f)
-
 
     # Wrap the objective inside a lambda and call objective inside it
     objective = lambda trial: objective_function(trial, parser, args)
 
-    #study = optuna.create_study(directions=["maximize","minimize"]) # maximize mcc, minimize pred_time
+    # study = optuna.create_study(directions=["maximize","minimize"]) # maximize mcc, minimize pred_time
 
     storage_name = f"sqlite:///{args.study_name}.db"
     storage_name = r"{}".format(storage_name)
@@ -189,7 +177,6 @@ def main():
             storage=storage_name,
             directions=["maximize", "minimize"],
             load_if_exists=True,
-            
         )
     study.set_metric_names(["IoU_mcc", "pred_time"])
     study.optimize(objective, n_trials=args.n_trials)
