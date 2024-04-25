@@ -88,7 +88,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         sklearn: bool = False,
         batch_size: int = 32,
         validation_split: float = 0.2,
-        num_workers: int = 0,
+        num_workers: int = 15,
         window_size: int = 250,
         print_extractionTime: bool = False,
         max_presaved_epochs: int = 99,
@@ -145,10 +145,12 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         )
 
     def train_dataloader(self):
+        print("number of workers:", self.num_workers)
         return DataLoader(
             self.train_dataset,  # collate_fn=custom_collate_fn,
             batch_size=self.batch_size,
             shuffle=True,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):

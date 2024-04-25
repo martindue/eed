@@ -21,22 +21,15 @@ import pandas as pd
 from itertools import chain
 from collections import OrderedDict
 from typing import Type
-from src.ml.utils.helpers import impute_with_column_means
+from ml.utils.helpers import impute_with_column_means
 
 import numpy as np
-
 
 
 # Example usage:
 # X_imputed = impute_with_column_means(X)
 
-def make_predictions_and_save(classifier, data_loader, output_dir):
-    # Make predictions
-    X = np.concatenate([batch["features"].numpy() for batch in data_loader], axis=0)
-    X = impute_with_column_means(X)
-    y_pred = classifier.predict(X)
-
-    # Prepare additional information
+def fetch_data(data_loader):
     t = np.concatenate([batch["t"].numpy() for batch in data_loader], axis=0)
     xx = np.concatenate([batch["x"].numpy() for batch in data_loader], axis=0)
     yy = np.concatenate([batch["y"].numpy() for batch in data_loader], axis=0)
@@ -45,31 +38,34 @@ def make_predictions_and_save(classifier, data_loader, output_dir):
     file_index = np.concatenate(
         [batch["file_index"].numpy() for batch in data_loader], axis=0
     )
-
-    flat_list = list(chain.from_iterable(batch["file_name"] for batch in data_loader))    
-    unique_file_names_ordered = list(OrderedDict.fromkeys(flat_list))
-    # Convert predictions and additional information to DataFrame
     pd_output_df = pd.DataFrame(
         {
             "t": t,
             "x": xx,
             "y": yy,
             "status": status,
-            "evt": y_pred,
-        }
-    )
-
-    gt_output_df = pd.DataFrame(
-        {
-            "t": t,
-            "x": xx,
-            "y": yy,
-            "status": status,
             "evt": gt_label,
+            "file_index": file_index,
         }
     )
 
-    unique_file_indices = np.unique(file_index)
+    return pd_output_df
+
+def make_predictions_and_save(classifier, X,output_df, output_dir):
+    # Make predictions
+    y_pred = classifier.predict(X)
+
+    #get unique file names from output_df
+    unique_file_names = output_df["file_name"].unique()
+
+
+    file_index = output_df["file_index"].values
+    gt_output_df = output_df.drop(columns=["file_index","file_name"])
+    unique_file_indices = output_df["file_index"].unique()
+    print("unique_file_indices: ", unique_file_indices)
+
+    pd_output_df = output_df.drop(columns=["file_index", "evt", "file_name"])
+    pd_output_df["evt"] = y_pred
 
     # Save predictions for each unique file index
     for index in unique_file_indices:
@@ -77,15 +73,18 @@ def make_predictions_and_save(classifier, data_loader, output_dir):
         mask = file_index == index
         pd_filtered_df = pd_output_df[mask]
         gt_filtered_df = gt_output_df[mask]
-        file_name = os.path.splitext(unique_file_names_ordered[index])[0]
+        file_name = os.path.splitext(unique_file_names[index])[0]
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
         # Save predictions to a file
+        print(f"Saving predictions for {file_name} to {output_dir}...")
         pd_file_path = os.path.join(output_dir, f"{file_name}_pd.csv")
+        pd_filtered_df.sort_values(by=["t"], inplace=True)
         pd_filtered_df.to_csv(pd_file_path, index=False)
 
         gt_file_path = os.path.join(output_dir, f"{file_name}_gt.csv")
+        gt_filtered_df.sort_values(by=["t"], inplace=True)
         gt_filtered_df.to_csv(gt_file_path, index=False)
 
 
@@ -117,27 +116,65 @@ def main(
             verbose=rf_config["verbose"],
         )
 
-    X_train = np.concatenate(
-        [batch["features"].numpy() for batch in train_data_loader], axis=0
+    for batch in train_data_loader:
+        X_train = batch["features"]
+        y_train = batch["label"]
+        t =  batch["t"]
+        xx = batch["x"]
+        yy = batch["y"]
+        status = batch["status"]
+        file_index = batch["file_index"]
+        file_name = batch["file_name"]
+    train_output_df = pd.DataFrame(
+        {
+            "t": t,
+            "x": xx,
+            "y": yy,
+            "status": status,
+            "evt": y_train,
+            "file_index": file_index,
+            "file_name": file_name,
+        }
     )
-    y_train = np.concatenate(
-        [batch["label"].numpy() for batch in train_data_loader], axis=0
-    )
+    
+    for batch in validation_data_loader:
+        X_val = batch["features"]
+        t = batch["t"]
+        xx = batch["x"]
+        yy = batch["y"]
+        y_val = batch["label"]
+        status = batch["status"]
+        file_index = batch["file_index"]
+        file_name = batch["file_name"]
 
+    val_output_df = pd.DataFrame(
+        {
+            "t": t,
+            "x": xx,
+            "y": yy,
+            "status": status,
+            "evt": y_val,
+            "file_index": file_index,
+            "file_name": file_name, 
+        }
+    )
+    
     X_train = impute_with_column_means(X_train)
+    X_val = impute_with_column_means(X_val)
 
     print("dimensions of X and y:", X_train.shape, y_train.shape)
     print("Fitting classifier.... ")
     clf.fit(X_train, y_train)
 
+
     # Make predictions and save them
     print("Predicting on train data....")
     make_predictions_and_save(
-        clf, train_data_loader, ".experiments/results/sklearn/train"
+        clf, X_train, train_output_df, ".experiments/results/sklearn/train"
     )
-    print("Predicting on test data....")
+    print("Predicting on validation data....")
     make_predictions_and_save(
-        clf, validation_data_loader, ".experiments/results/sklearn/test"
+        clf, X_val, val_output_df, ".experiments/results/sklearn/validation"
     )
 
 

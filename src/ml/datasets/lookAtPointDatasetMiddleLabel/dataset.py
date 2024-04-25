@@ -20,21 +20,26 @@ def get_window_indices(data, window_params):
     post_idx_accum = []
     pre_idx_accum = []
     center_idx_accum = []
+    cumulative_index = 0  # Initialize cumulative index
+
     for _, d in data.groupby("file_index"):
         # get indices for each time window
         indices = d.index.values
 
         onset = range(window_size, len(d) - window_size, window_stride)
-        post_idx = [slice(indices[s], indices[s + window_size - 1]) for s in onset]
-        pre_idx = [slice(indices[s - window_size], indices[s - 1]) for s in onset]
+        post_idx = [slice(cumulative_index + indices[s], cumulative_index + indices[s + window_size - 1] + 1) for s in onset]
+        pre_idx = [slice(cumulative_index + indices[s - window_size], cumulative_index + indices[s - 1] + 1) for s in onset]
         center_idx = [
-            slice(indices[s - window_size // 2], indices[s + window_size // 2])
+            slice(cumulative_index + indices[s - window_size // 2], cumulative_index + indices[s + window_size // 2] + 1)
             for s in onset
         ]
 
         post_idx_accum.extend(post_idx)
         pre_idx_accum.extend(pre_idx)
         center_idx_accum.extend(center_idx)
+
+        # Update cumulative index
+        cumulative_index += len(d)
 
     return pre_idx_accum, center_idx_accum, post_idx_accum
 
@@ -245,14 +250,14 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     dtype=torch.float32,
                 ),
                 "label": torch.tensor(
-                    self.presaved_features.iat[idx,4], dtype=torch.long
+                    self.presaved_features.iat[idx, 4], dtype=torch.long
                 ),
-                "t": self.presaved_features.iat[idx,0],
-                "x": self.presaved_features.iat[idx,1],
-                "y": self.presaved_features.iat[idx,2],
-                "status": self.presaved_features.iat[idx,3],
-                "file_name": self.file_names[self.presaved_features.iat[idx,5]],
-                "file_index": self.presaved_features.iat[idx,5],
+                "t": self.presaved_features.iat[idx, 0],
+                "x": self.presaved_features.iat[idx, 1],
+                "y": self.presaved_features.iat[idx, 2],
+                "status": self.presaved_features.iat[idx, 3],
+                "file_name": self.file_names[self.presaved_features.iat[idx, 5]],
+                "file_index": self.presaved_features.iat[idx, 5],
             }
 
     def extract_features(
@@ -289,6 +294,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         features["status"] = status  # 3
         features["label"] = label  # 4
         features["file_index"] = file_index  # 5
+        features["file_name"] = self.file_names[file_index]  # 6
 
         fs = 1000  # TODO: Extract fs from timestamps in data.
         features["fs"] = fs
