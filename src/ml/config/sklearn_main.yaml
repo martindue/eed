@@ -5,6 +5,9 @@ data_module:
     sklearn: true
     validation_split: 0.2
     num_workers: 15
+    window_size: 75
+    window_size_vel: 50
+    window_size_dir: 22
     training_datasets:
 stage: fit
 classifier_type: sklearn.ensemble.RandomForestClassifier

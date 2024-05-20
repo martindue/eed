@@ -91,7 +91,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         validation_split: float = 0.2,
         num_workers: int = 15,
         window_size: int = 100,
-        window_size_vel: int = 12,
+        window_size_vel: int = 20,
         window_size_dir: int = 22,
         print_extractionTime: bool = False,
         max_presaved_epochs: int = 99,

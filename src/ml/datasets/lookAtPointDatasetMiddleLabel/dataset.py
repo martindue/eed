@@ -90,7 +90,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self,
         data_dir: str = "/home/martin/Documents/Exjobb/eed/.data",
         long_window_size: int = 250,
-        window_size_vel: int = 12,
+        window_size_vel: int = 20,
         window_size_dir: int = 22,
         print_extractionTime: bool = False,  # TODO:remove
         max_presaved_epoch: int = 98,
@@ -218,7 +218,11 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     sg.savgol_filter(aug_data[:, 0], self.window_size_vel, 2, 2, axis=0),
                     sg.savgol_filter(aug_data[:, 1], self.window_size_vel, 2, 2, axis=0)
                 )*self.fs**2
+                # take a moving average of the acceleration, using pandas
+                acc_data_averaged = pd.DataFrame(acc_data).rolling(window=self.window_size_vel, center=True).mean().bfill().ffill().values
 
+                print("Vel_window_len: ", self.window_size_vel)
+                print("normal window size: ", self.center_window_indices[200].stop - self.center_window_indices[200].start )
                 for idx in tqdm(
                     range(len(self.center_window_indices)), desc="Extracting features"
                 ):
@@ -243,11 +247,13 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                         post_window_data,
                         dir_window_data,
                         vel_data[middleOfWindow],
-                        acc_data[middleOfWindow]
+                        acc_data[middleOfWindow],
+                        acc_data_averaged[middleOfWindow]
                     )
 
                     dict_list.append(features)
                 features_df = pd.DataFrame.from_records(dict_list)
+
                 # save augmentation as parquet
                 features_df.to_parquet(
                     os.path.join(
@@ -333,7 +339,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             }
 
     def extract_features(
-        self, center_window, pre_window_data, center_window_data, post_window_data, dir_window_data, vel, acc
+        self, center_window, pre_window_data, center_window_data, post_window_data, dir_window_data, vel, acc, acc_averaged
     ):  
         pre_x_windowed = pre_window_data[:, 0]
         pre_y_windowed = pre_window_data[:, 1]
@@ -391,9 +397,9 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         std_y = np.nanstd(c_y_windowed)
 
         features["std"] = np.hypot(std_x, std_y)
-        features["std-diff"] = np.hypot(
+        features["std-diff"] = np.abs(np.hypot(
             features["std-post-x"], features["std-post-y"]
-        ) - np.hypot(features["std-pre-x"], features["std-pre-y"])
+        ) - np.hypot(features["std-pre-x"], features["std-pre-y"]))
 
         features["mean-diff"] = np.hypot(
             features["mean-diff-x"], features["mean-diff-y"]
@@ -417,20 +423,20 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         bcea_post = calculate_bcea(post_x_windowed, post_y_windowed)
 
         features["bcea"] = bcea_center
-        features["bcea_diff"] = bcea_post - bcea_pre
+        features["bcea_diff"] = np.abs(bcea_post - bcea_pre)
 
         # RMS
         features["rms"] = np.hypot(
             np.sqrt(np.mean(np.square(c_x_windowed_dx))),
             np.sqrt(np.mean(np.square(c_y_windowed_dy))),
         )
-        features["rms-diff"] = np.hypot(
+        features["rms-diff"] = np.abs(np.hypot(
             np.sqrt(np.mean(np.square(post_x_windowed))),
             np.sqrt(np.mean(np.square(post_y_windowed))),
         ) - np.hypot(
             np.sqrt(np.mean(np.square(pre_x_windowed))),
             np.sqrt(np.mean(np.square(pre_y_windowed))),
-        )
+        ))
 
         # dispersion, aka idt feature
         x_range = np.nanmax(c_x_windowed) - np.nanmin(c_x_windowed)
@@ -449,6 +455,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         features["vel"] = vel
         features["acc"] = acc
 
+        features["acc_averaged"] = acc_averaged
         # rayleightest
         angl = np.arctan2(y_dir_windowed, x_dir_windowed)
         features["rayleightest"] = ast.rayleightest(angl)
