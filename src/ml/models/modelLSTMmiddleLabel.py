@@ -3,9 +3,7 @@ import torch.nn.functional
 
 
 class TorchModel(torch.nn.Module):
-    def __init__(
-        self, input_size: int = 2, hidden_size: int = 64, num_classes: int = 6
-    ):
+    def __init__(self, input_size: int = 2, hidden_size: int = 64, num_classes: int = 6):
         super(TorchModel, self).__init__()
 
         self.lstm = torch.nn.LSTM(input_size, hidden_size, batch_first=True)

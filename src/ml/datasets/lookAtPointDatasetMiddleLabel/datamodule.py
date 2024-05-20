@@ -40,8 +40,9 @@ from torch.utils.data.dataset import random_split
 from torchvision import transforms
 
 # from dataset import LookAtPointDataset
-from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import \
-    LookAtPointDatasetMiddleLabel
+from ml.datasets.lookAtPointDatasetMiddleLabel.dataset import (
+    LookAtPointDatasetMiddleLabel,
+)
 
 
 def custom_collate_fn(batch):
@@ -89,10 +90,13 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         batch_size: int = 32,
         validation_split: float = 0.2,
         num_workers: int = 15,
-        window_size: int = 250,
+        window_size: int = 100,
+        window_size_vel: int = 12,
+        window_size_dir: int = 22,
         print_extractionTime: bool = False,
         max_presaved_epochs: int = 99,
         noise_levels: list = [0],
+        training_datasets: list[str] = ["lund2013"],
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -101,64 +105,98 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         self.num_workers = num_workers
         self.sklearn = sklearn
         self.window_size = window_size
+        self.window_size_vel = window_size_vel
+        self.window_size_dir = window_size_dir
         self.print_extractionTime = print_extractionTime
         self.max_presaved_epochs = max_presaved_epochs
         self.noise_levels = noise_levels
+        self.training_datasets = training_datasets
 
     def setup(self, stage=None):
         # Load dataset
-        dataset = LookAtPointDatasetMiddleLabel(
+        self.train_dataset = LookAtPointDatasetMiddleLabel(
             data_dir=self.data_dir,
             long_window_size=self.window_size,
+            window_size_vel=self.window_size_vel,
+            window_size_dir=self.window_size_dir,
             print_extractionTime=self.print_extractionTime,
             max_presaved_epoch=self.max_presaved_epochs,
             trainer=self.trainer,
             noise_levels=self.noise_levels,
-            train=True,
+            split="train",
             sklearn=self.sklearn,
+            training_datasets=self.training_datasets,
         )
-        self.dataset = dataset
         print("sklearn:", self.sklearn)
-        data_len = len(dataset)
-        print(data_len)
-        if self.sklearn:
-            print("Using sklearn")
-            self.batch_size = data_len
+        data_len = len(self.train_dataset)
+        print("Train data length:", data_len)
 
+        ### Not necessary anymore because we are doing subject-level splits
         # Calculate sizes of train/validation split
-        val_size = int(data_len * self.validation_split)
-        train_size = data_len - val_size
+        # val_size = int(data_len * self.validation_split)
+        # train_size = data_len - val_size
 
         # Split dataset
-        self.train_dataset, self.val_dataset = random_split(
-            dataset, [train_size, val_size]
-        )
-        self.test_dataset = LookAtPointDatasetMiddleLabel(
+        # self.train_dataset, self.val_dataset = random_split(
+        #    dataset, [train_size, val_size]
+        # )
+
+        self.val_dataset = LookAtPointDatasetMiddleLabel(
             self.data_dir,
             self.window_size,
+            self.window_size_vel,
+            self.window_size_dir,
             self.print_extractionTime,
             self.max_presaved_epochs,
             self.trainer,
             self.noise_levels,
-            train=False,
+            split="val",
             sklearn=self.sklearn,
+            training_datasets=self.training_datasets,
         )
+
+        self.test_dataset = LookAtPointDatasetMiddleLabel(
+            self.data_dir,
+            self.window_size,
+            self.window_size_vel,
+            self.window_size_dir,
+            self.print_extractionTime,
+            self.max_presaved_epochs,
+            self.trainer,
+            self.noise_levels,
+            split="test",
+            sklearn=self.sklearn,
+            training_datasets=self.training_datasets,
+        )
+
+        if self.sklearn:  # make sure that we always fetch
+            # all of the data when using sklearn
+            print("Using sklearn")
+            self.batch_size = max(
+                len(self.train_dataset), len(self.val_dataset), len(self.test_dataset)
+            )
 
     def train_dataloader(self):
         print("number of workers:", self.num_workers)
         return DataLoader(
             self.train_dataset,  # collate_fn=custom_collate_fn,
             batch_size=self.batch_size,
-            shuffle=True,
+            shuffle=not (self.sklearn),
             num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=not (self.sklearn),
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
         return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers
+            self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=not (self.sklearn),
+            num_workers=self.num_workers,
         )

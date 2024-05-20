@@ -10,6 +10,20 @@ data:
   noise_levels:
   - 0
   - 0.1
+  training_datasets:
+  - no extra
+pp_args:
+  sacc_minimum_distance: 0.1
+  pp_kwargs:
+    thres_id: 75.0
+    thres_ifa: 0.2
+    thres_ifi: 75.0
+    thres_sd_s: 3
+    thres_pd: 3
+    thres_isi: 25.0
+    thres_sd_lo: 6.0
+    thres_sd_hi: 150.0
+    thres_fd: 50.0
 jobs:
   matchers: {
                 "iou": {}
@@ -28,11 +42,13 @@ jobs:
   event_map: {
         "1": 1,
         "2": 2,
-        "3": 3,
-        "4": 4,
+        "3": 1,
+        "4": 1,
         "5": 5,
         "0": 0
     }
 log_dir: /home/martin/Documents/Exjobb/eed/.experiments
-study_name: TestSweep8
+study_name: TestSweep15
 n_trials: 20
+objective_metrics:
+- IoU_mcc

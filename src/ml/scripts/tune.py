@@ -5,16 +5,18 @@ from pathlib import Path
 import lightning.pytorch as lp
 import optuna
 from jsonargparse import ActionConfigFile
-from lightning.pytorch.cli import (LightningArgumentParser, LightningCLI,
-                                   SaveConfigCallback)
+from lightning.pytorch.cli import (
+    LightningArgumentParser,
+    LightningCLI,
+    SaveConfigCallback,
+)
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
-    LookAtPointDataModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 from ml.engines.system import LitModule
 
 
@@ -61,9 +63,7 @@ def main():
     storage_name = r"{}".format(storage_name)
     if Path(storage_name).exists():
         print(f"Load existing study {args.study_name}")
-        study = optuna.study.load_study(
-            study_name=args.study_name, storage=storage_name
-        )
+        study = optuna.study.load_study(study_name=args.study_name, storage=storage_name)
     else:
         study = optuna.create_study(
             study_name=args.study_name,

@@ -12,10 +12,16 @@ import optuna
 import pandas as pd
 import sklearn.model_selection
 from jsonargparse import CLI, ActionConfigFile, ArgumentParser
-from lightning.pytorch.cli import (LightningArgumentParser, LightningCLI,
-                                   SaveConfigCallback)
+from lightning.pytorch.cli import (
+    LightningArgumentParser,
+    LightningCLI,
+    SaveConfigCallback,
+)
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import LinearSVC
+from sklearn.preprocessing import LabelEncoder
+import xgboost as xgb
+
 
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
@@ -27,10 +33,12 @@ from eval.misc import eval_utils, matching
 from funcy import omit
 
 # from ml.scripts.main_sklearn import main as main_sklearn
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
-    LookAtPointDataMiddleLabelModule
-from ml.utils.classes import job
-from ml.utils.helpers import impute_with_column_means
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
+)
+from ml.utils.post_processing import post_process
+from ml.utils.classes import job, pp_args
+from ml.utils.helpers import impute_with_column_means, linear_interpol_with_pandas
 
 
 def calculate_metrics(data_gt, data_pr, job):
@@ -68,11 +76,11 @@ def calculate_metrics(data_gt, data_pr, job):
     return result_accum
 
 
-def objective_function(
-    trial: optuna.trial.Trial, parser: ArgumentParser, args
-) -> float:
+def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) -> float:
     data_module = LookAtPointDataMiddleLabelModule(
-        data_dir=args.data.data_dir, sklearn=True
+        data_dir=args.data.data_dir,
+        sklearn=True,
+        training_datasets=args.data.training_datasets,
     )
     data_module.prepare_data()
     data_module.setup(stage="fit")
@@ -82,25 +90,54 @@ def objective_function(
     for data in train_data_loader:
         X_train = data["features"]
         X_train = X_train.squeeze()
+        y_train_df = pd.DataFrame(omit(data, ["features"]))
+        y_train_df.rename(columns={"label": "evt"}, inplace=True)
+        y_train_df.replace({"evt": args.jobs.event_map}, inplace=True)
         y = data["label"]
+        # Replace values in numpy array using dictionary
+        for old_val, new_val in args.jobs.event_map.items():
+            y[y == old_val] = new_val
+        y.numpy()
+
     for data in val_data_loader:
         X_val = data["features"]
         X_val = X_val.squeeze()
         val_data = pd.DataFrame(omit(data, ["features"]))
-        y_df = val_data.filter(["t", "x", "y", "status", "label"])
-        y_df.rename(columns={"label": "evt"}, inplace=True)
+        y_val_df = val_data.filter(["t", "x", "y", "status", "label"])
+        y_val_df.rename(columns={"label": "evt"}, inplace=True)
+        y_val_df.replace({"evt": args.jobs.event_map}, inplace=True)
+
+    val_mask = y_val_df["status"]| (y_val_df["evt"] != 5)
+    y_val_df = y_val_df[val_mask]
+    X_val = X_val[val_mask] # this is slightly wrong, because the window can still contain samples with status False
+    val_data = val_data[val_mask]   
+
+    train_mask = y_train_df["status"]|(y_train_df["evt"] != 5)
+    X_train = X_train[train_mask]
+    y = y[train_mask]
+    y_train_df = y_train_df[train_mask]
+
+ 
+    y_val_df.reset_index(drop=True, inplace=True)
+    val_data.reset_index(drop=True, inplace=True)
+
     print("Data loaded")
     X_train = X_train.numpy()
     y = y.numpy()
-    X_train = impute_with_column_means(X_train)
+
+    X_train = linear_interpol_with_pandas(X_train)
+    #X_train = impute_with_column_means(X_train)  # TODO: Change to a smarter approach
 
     X_val = X_val.numpy()
-    X_val = impute_with_column_means(X_val)
+    X_val = linear_interpol_with_pandas(X_val)
+    #X_val = impute_with_column_means(X_val)
 
     print("dimensions of X and y:", X_train.shape, y.shape)
 
-    classifier_name = trial.suggest_categorical("classifier", ["SVC", "RandomForest"])
-    # classifier_name = "RandomForest"
+    #classifier_name = trial.suggest_categorical("classifier", ["SVC", "RandomForest", "xgboost"])
+    classifier_name = "RandomForest"
+    #classifier_name = "xgboost"
+
     if classifier_name == "RandomForest":
         classifier_obj = RandomForestClassifier()
         rf_config = {
@@ -117,6 +154,25 @@ def objective_function(
     elif classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
         classifier_obj = LinearSVC(C=svc_c)
+    elif classifier_name == "xgboost":
+        xgb_params = {
+            "max_depth": trial.suggest_int("max_depth", 1, 32),
+            "n_estimators": trial.suggest_int("n_estimators", 8, 48),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-3, 1e1, log=True),
+            "gamma": trial.suggest_float("gamma", 1e-10, 1e10, log=True),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-10, 1e10, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-10, 1e10, log=True),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 32),
+            "subsample": trial.suggest_float("subsample", 0.1, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.1, 1.0),
+            "n_jobs": args.data.num_workers,
+            "verbosity": 3,
+        }
+        #le = LabelEncoder()
+        #y = le.fit_transform(y)
+        #y_val_df["evt"] = le.transform(y_val_df["evt"])
+        classifier_obj = xgb.XGBClassifier(**xgb_params)
+
 
     else:
         raise ValueError(f"Unknown classifier {classifier_name}")
@@ -129,18 +185,46 @@ def objective_function(
 
     y_hat_df = val_data.filter(["t", "x", "y", "status"])
     y_hat_df["evt"] = _pred
-    scores = calculate_metrics(y_df, y_hat_df, args.jobs)
-    # score = sklearn.model_selection.cross_val_score(
-    #    classifier_obj, X, y, n_jobs=-1, cv=3
-    # )
-    # score = score.mean()
 
-    return scores[0]["mcc"], pred_time  # return mcc score for multiclass all events
+    y_hat_df = post_process(y_hat_df, args.pp_args)
+
+    # Temporary removal of samples made false by post processing
+    mask2 = y_hat_df["status"] == True
+    y_val_df = y_val_df[mask2]
+    y_hat_df = y_hat_df[mask2]
+
+    # reset index
+    y_val_df.reset_index(drop=True, inplace=True)
+    y_hat_df.reset_index(drop=True, inplace=True)
+
+    scores = calculate_metrics(y_val_df, y_hat_df, args.jobs)
+
+    if "IoU_mcc" in args.objective_metrics and "pred_time" in args.objective_metrics:
+        return scores[0]["mcc"], pred_time
+    elif "IoU_mcc" in args.objective_metrics:
+        return scores[0]["mcc"]
+    elif "pred_time" in args.objective_metrics:
+        return pred_time
+    else:
+        raise ValueError(f"Unknown metric {args.objective_metrics}")
+
+
+def get_study_directions(objective_metrics):
+    study_directions = []
+    for metric in objective_metrics:
+        if metric in ["IoU_mcc", "IoU_f1", "IoU_precision", "IoU_recall"]:
+            study_directions.append("maximize")
+        elif metric in ["pred_time"]:
+            study_directions.append("minimize")
+        else:
+            raise ValueError(f"Unknown metric {metric}")
+    return study_directions
 
 
 def main():
     parser = ArgumentParser()
     parser.add_class_arguments(LookAtPointDataMiddleLabelModule, "data")
+    parser.add_class_arguments(pp_args, "pp_args")
     parser.add_class_arguments(job, "jobs")
     parser.add_argument(
         "log_dir", type=str, default="/home/martin/Documents/Exjobb/eed/.experiments"
@@ -148,12 +232,15 @@ def main():
     parser.add_argument("-c", "--config", action=ActionConfigFile)
     parser.add_argument("-n", "--study_name", default="TestSweep")
     parser.add_argument("-t", "--n_trials", default=100)
+    parser.add_argument("-m", "--objective_metrics", default=["IoU_mcc"])
 
     args = parser.parse_args()
-
+    args.jobs.event_map = utils.keys2num(args.jobs.event_map)
     log_path = Path(args.log_dir) / "sklearn_optuna_logs"
     log_path.mkdir(parents=True, exist_ok=True)
     print(f"Logging to {log_path}")
+
+    study_directions = get_study_directions(args.objective_metrics)
 
     # jpath = utils.path2abs(args.job, root_repo)  # TODO: take this from config file.
     # with open(jpath, "r") as f:
@@ -163,30 +250,27 @@ def main():
     objective = lambda trial: objective_function(trial, parser, args)
 
     # study = optuna.create_study(directions=["maximize","minimize"]) # maximize mcc, minimize pred_time
-
     storage_name = f"sqlite:///{args.study_name}.db"
     storage_name = r"{}".format(storage_name)
     if Path(storage_name).exists():
         print(f"Load existing study {args.study_name}")
-        study = optuna.study.load_study(
-            study_name=args.study_name, storage=storage_name
-        )
+        study = optuna.study.load_study(study_name=args.study_name, storage=storage_name)
     else:
         study = optuna.create_study(
             study_name=args.study_name,
             storage=storage_name,
-            directions=["maximize", "minimize"],
+            directions=study_directions,
             load_if_exists=True,
         )
-    study.set_metric_names(["IoU_mcc", "pred_time"])
+    study.set_metric_names(args.objective_metrics)
     study.optimize(objective, n_trials=args.n_trials)
 
     print("Number of finished trials: {}".format(len(study.trials)))
     print("Best trials:")
     trial = study.best_trials
-    print("  Value: {}".format(trial.value))
+    print("  Value: {}".format(trial[0].value))
     print("  Params: ")
-    for key, value in trial.params.items():
+    for key, value in trial[0].params.items():
         print("    {}: {}".format(key, value))
 
     f1 = optuna.visualization.plot_parallel_coordinate(study)

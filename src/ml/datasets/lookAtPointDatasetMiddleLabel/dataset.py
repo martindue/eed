@@ -7,7 +7,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import scipy.signal as sg
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
 x = os.path.dirname(__file__)
@@ -90,58 +90,84 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self,
         data_dir: str = "/home/martin/Documents/Exjobb/eed/.data",
         long_window_size: int = 250,
+        window_size_vel: int = 12,
+        window_size_dir: int = 22,
         print_extractionTime: bool = False,  # TODO:remove
         max_presaved_epoch: int = 98,
         trainer: pl.Trainer = None,
         noise_levels: list = [0, 0.1],
-        train: bool = True,
+        split: str = "train",
         sklearn: bool = False,
+        training_datasets: list[str] = [],
+        debugMode: bool = False,
     ):
         self.noise_levels = noise_levels
         self.print_extractionTime = print_extractionTime
         self.data_dir = data_dir
         self.max_presaved_epoch = max_presaved_epoch
         self.trainer = trainer
-        self.train = train
+        self.split = split
         self.data = None
         self.data_df = None
         self.labels = None
         self.pre_window_indices = None
         self.center_window_indices = None
         self.post_window_indices = None
+        self.window_size_dir = window_size_dir
+        self.window_size_vel = window_size_vel
         self.presaved_features = None
         self.file_names = []
         self.sklearn = sklearn
+        self.training_datasets = training_datasets
+        self.debugMode = debugMode
+        self.fs = 1000
 
         self.load_data()
         self.interpolate_nan_values()
-        self.setup_window_indices(long_window_size)
+        self.setup_window_indices(long_window_size, window_size_vel, window_size_dir)
         self.setup_augmented_data()
 
     def load_data(self):
-        if self.train:
-            load_dir = os.path.join(self.data_dir, "raw/train_data")
+        if self.debugMode and self.split == "train":
+            load_dirs = [os.path.join(self.data_dir, "raw/debugDir")]
+        elif self.split == "train":
+            load_dirs = [os.path.join(self.data_dir, "raw/train_data")]
+            if self.training_datasets is not None and "lund2013" in self.training_datasets:
+                load_dirs.append(os.path.join(self.data_dir, "raw/lund_2013"))
+                print("Using Lund 2013 dataset")
+        elif self.split == "val":
+            load_dirs = [os.path.join(self.data_dir, "raw/val_data")]
+        elif self.split == "test":
+            load_dirs = [os.path.join(self.data_dir, "raw/test_data")]
         else:
-            load_dir = os.path.join(self.data_dir, "raw/test_data")
+            raise ValueError("Invalid split")
 
-        file_list = os.listdir(load_dir)
-        numpy_files = [f for f in file_list if f.endswith(".npy")]
-        self.file_names = file_list
+        if not any(os.path.exists(dir) and os.listdir(dir) for dir in load_dirs):
+            raise FileNotFoundError("No valid load directories found")
+
         appended_df = None
-        for idx, file_name in enumerate(numpy_files):
-            file_path = os.path.join(load_dir, file_name)
-            loaded_array = np.load(file_path)
-            df = pd.DataFrame(loaded_array)
-            df["file_index"] = idx
-            if appended_df is None:
-                appended_df = df
-            else:
-                appended_df = pd.concat((appended_df, df))
-
+        file_names = []
+        file_idx = 0
+        for load_dir in load_dirs:
+            if os.path.exists(load_dir) and os.listdir(load_dir):
+                file_list = os.listdir(load_dir)
+                numpy_files = [f for f in file_list if f.endswith(".npy")]
+                file_names.extend(file_list)
+            for file_name in numpy_files:
+                file_path = os.path.join(load_dir, file_name)
+                loaded_array = np.load(file_path)
+                df = pd.DataFrame(loaded_array)
+                df["file_index"] = file_idx
+                file_idx += 1
+                if appended_df is None:
+                    appended_df = df
+                else:
+                    appended_df = pd.concat((appended_df, df))
         # appended_df = df  # Remove this line to use the full dataset.
         self.data_df = appended_df
         self.data = np.stack((appended_df["x"], appended_df["y"]), axis=-1)
         self.labels = appended_df["evt"]
+        self.file_names = file_names
 
     def interpolate_nan_values(self):
         for i in range(self.data.shape[1]):
@@ -153,7 +179,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     self.data[:, i][~nan_indices],
                 )
 
-    def setup_window_indices(self, long_window_size: int):
+    def setup_window_indices(self, long_window_size: int, window_size_vel: int, window_size_dir: int):
         (
             self.pre_window_indices,
             self.center_window_indices,
@@ -162,18 +188,18 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             self.data_df, {"window_size": long_window_size, "window_resolution": 1}
         )
 
+
     def __len__(self):
         return len(self.center_window_indices)  # number of windows
 
     # it returns a pandas df with the features
     def setup_augmented_data(self) -> pd.DataFrame:
-        aug_dir = os.path.join(self.data_dir, "augmented_data")
+        aug_dir = os.path.join(self.data_dir, "augmented_data", self.split)
 
         if not os.path.exists(aug_dir):
             os.makedirs(aug_dir)
 
-        noise_levels = [0, 0.1]
-        for i, noise_level in enumerate(noise_levels):
+        for i, noise_level in enumerate(self.noise_levels):
             if not any(
                 f"augmented_data_{i}_noise_{noise_level}" in file
                 for file in os.listdir(aug_dir)
@@ -182,20 +208,42 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 # add noise and extract features
                 aug_data = add_normal_noise(self.data, noise_level)
                 dict_list = []
+                
+                # differentiate the data to get velocity and acceleration
+                vel_data = np.hypot(
+                    sg.savgol_filter(aug_data[:, 0], self.window_size_vel, 2, 1, axis=0),
+                    sg.savgol_filter(aug_data[:, 1], self.window_size_vel, 2, 1, axis=0)
+                )*self.fs
+                acc_data = np.hypot(
+                    sg.savgol_filter(aug_data[:, 0], self.window_size_vel, 2, 2, axis=0),
+                    sg.savgol_filter(aug_data[:, 1], self.window_size_vel, 2, 2, axis=0)
+                )*self.fs**2
+
                 for idx in tqdm(
                     range(len(self.center_window_indices)), desc="Extracting features"
                 ):
                     pre_window = self.pre_window_indices[idx]
                     center_window = self.center_window_indices[idx]
                     post_window = self.post_window_indices[idx]
+
                     pre_window_data = aug_data[pre_window]
                     center_window_data = aug_data[center_window]
                     post_window_data = aug_data[post_window]
+
+
+                    midpoint = len(center_window_data)//2
+                    dir_window_data = center_window_data[(midpoint-self.window_size_dir): (midpoint + self.window_size_dir)]
+
+                    middleOfWindow = (center_window.start + center_window.stop) // 2
+
                     features = self.extract_features(
                         center_window,
                         pre_window_data,
                         center_window_data,
                         post_window_data,
+                        dir_window_data,
+                        vel_data[middleOfWindow],
+                        acc_data[middleOfWindow]
                     )
 
                     dict_list.append(features)
@@ -203,19 +251,21 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 # save augmentation as parquet
                 features_df.to_parquet(
                     os.path.join(
-                        aug_dir, f"augmented_data_{i}_noise_{noise_level}.parquet"
+                        aug_dir,
+                        f"augmented_data_{i}_noise_{noise_level}_{self.split}.parquet",
                     )
                 )
 
         # load parquet files and append them to the original data
         df_list = None
         for file in os.listdir(aug_dir):
-            file_path = os.path.join(aug_dir, file)
-            df = pd.read_parquet(file_path)
-            if df_list is None:
-                df_list = df
-            else:
-                df_list = pd.concat((df_list, df))
+            if any(str(noise_level) in file for noise_level in self.noise_levels):
+                file_path = os.path.join(aug_dir, file)
+                df = pd.read_parquet(file_path)
+                if df_list is None:
+                    df_list = df
+                else:
+                    df_list = pd.concat((df_list, df))
 
         self.presaved_features = df_list
         return
@@ -226,14 +276,22 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         pre_window = self.pre_window_indices[idx]
         center_window = self.center_window_indices[idx]
         post_window = self.post_window_indices[idx]
+
         pre_window_data = data[pre_window]
         center_window_data = data[center_window]
         post_window_data = data[post_window]
+        
+        midpoint = (center_window.stop + center_window.start)//2
+        dir_window_data = center_window_data[(midpoint-self.window_size_dir//2): (midpoint + self.window_size_dir//2)]
+        vel_window_data = center_window_data[(midpoint-self.window_size_vel//2): (midpoint + self.window_size_vel//2)]
+
         features = self.extract_features(
             center_window,
             pre_window_data,
             center_window_data,
             post_window_data,
+            dir_window_data,
+            vel_window_data,
         )
         features_df = pd.DataFrame([features])
         return features_df
@@ -265,9 +323,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     self.presaved_features.iloc[idx, 7:],
                     dtype=torch.float32,
                 ),
-                "label": torch.tensor(
-                    self.presaved_features.iat[idx, 4], dtype=torch.long
-                ),
+                "label": torch.tensor(self.presaved_features.iat[idx, 4], dtype=torch.long),
                 "t": self.presaved_features.iat[idx, 0],
                 "x": self.presaved_features.iat[idx, 1],
                 "y": self.presaved_features.iat[idx, 2],
@@ -277,8 +333,8 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             }
 
     def extract_features(
-        self, center_window, pre_window_data, center_window_data, post_window_data
-    ):
+        self, center_window, pre_window_data, center_window_data, post_window_data, dir_window_data, vel, acc
+    ):  
         pre_x_windowed = pre_window_data[:, 0]
         pre_y_windowed = pre_window_data[:, 1]
 
@@ -289,6 +345,9 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
         post_x_windowed = post_window_data[:, 0]
         post_y_windowed = post_window_data[:, 1]
+
+        x_dir_windowed = dir_window_data[:, 0]
+        y_dir_windowed = dir_window_data[:, 1]
 
         middlePoint = (center_window.start + center_window.stop) // 2
 
@@ -328,13 +387,29 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             features["std-pre-%s" % d] = np.nanstd(dd[0])
             features["std-post-%s" % d] = np.nanstd(dd[1])
 
-        features["std-x"] = np.nanstd(c_x_windowed)
-        features["std-y"] = np.nanstd(c_y_windowed)
+        std_x = np.nanstd(c_x_windowed)
+        std_y = np.nanstd(c_y_windowed)
 
-        features["std"] = np.hypot(features["std-x"], features["std-y"])
+        features["std"] = np.hypot(std_x, std_y)
         features["std-diff"] = np.hypot(
             features["std-post-x"], features["std-post-y"]
         ) - np.hypot(features["std-pre-x"], features["std-pre-y"])
+
+        features["mean-diff"] = np.hypot(
+            features["mean-diff-x"], features["mean-diff-y"]
+        )
+        features["med-diff"] = np.hypot(
+            features["med-diff-x"], features["med-diff-y"]
+        )  
+        
+        del features["std-pre-x"]
+        del features["std-pre-y"]
+        del features["std-post-x"]
+        del features["std-post-y"]
+        del features["mean-diff-x"]
+        del features["mean-diff-y"]
+        del features["med-diff-x"]
+        del features["med-diff-y"]
 
         # bcea
         bcea_pre = calculate_bcea(pre_x_windowed, pre_y_windowed)
@@ -346,8 +421,8 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
         # RMS
         features["rms"] = np.hypot(
-            np.sqrt(np.mean(np.square(c_x_windowed))),
-            np.sqrt(np.mean(np.square(c_y_windowed))),
+            np.sqrt(np.mean(np.square(c_x_windowed_dx))),
+            np.sqrt(np.mean(np.square(c_y_windowed_dy))),
         )
         features["rms-diff"] = np.hypot(
             np.sqrt(np.mean(np.square(post_x_windowed))),
@@ -362,17 +437,19 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         y_range = np.nanmax(c_y_windowed) - np.nanmin(c_y_windowed)
         features["disp"] = x_range + y_range
 
-        # velocity and acceleration #TODO: fix this. Make window length indep of normal window length. These two features take half the time to compute as the rest of the features.
-        # features["vel"] = np.hypot(sg.savgol_filter(c_x_windowed_dx, len(c_x_windowed_dx)-1, 2,1), sg.savgol_filter(c_y_windowed_dy, len(c_y_windowed)-1, 2,1))*fs
-        # features["acc"] = np.hypot(sg.savgol_filter(c_x_windowed_dx, len(c_x_windowed_dx)-1, 2,2), sg.savgol_filter(c_y_windowed_dy, len(c_y_windowed)-1, 2,2))*fs**2
-        features["vel"] = np.mean(
-            np.hypot(np.diff(c_x_windowed), np.diff(c_y_windowed)) * fs
-        )
-        features["acc"] = np.mean(
-            np.hypot(np.diff(np.diff(c_x_windowed)), np.diff(np.diff(c_y_windowed)))
-            * fs**2
-        )
+        
+        #velocity and acceleration
+        #vel_window_len = len(x_vel_windowed)
+        #features['vel']=np.nanmean(np.hypot(sg.savgol_filter(x_vel_windowed,vel_window_len-1, 2, 1),
+        #                         sg.savgol_filter(y_vel_windowed, vel_window_len-1, 2, 1))*fs)
+#
+        #features['acc']=np.nanmean(np.hypot(sg.savgol_filter(x_vel_windowed, vel_window_len-1, 2, 2),
+        #                         sg.savgol_filter(y_vel_windowed, vel_window_len-1, 2, 2))*fs**2)
+
+        features["vel"] = vel
+        features["acc"] = acc
+
         # rayleightest
-        angl = np.arctan2(c_y_windowed, c_x_windowed)
+        angl = np.arctan2(y_dir_windowed, x_dir_windowed)
         features["rayleightest"] = ast.rayleightest(angl)
         return features

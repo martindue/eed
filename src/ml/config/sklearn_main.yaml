@@ -4,13 +4,33 @@ data_module:
     data_dir: /home/martin/Documents/Exjobb/eed/.data/
     sklearn: true
     validation_split: 0.2
-    num_workers: 0
+    num_workers: 15
+    training_datasets:
 stage: fit
 classifier_type: sklearn.ensemble.RandomForestClassifier
 rf_config:
   n_trees: 38
   max_depth: 30
-  class_weight: balanced_subsample
-  max_features: 5
+  class_weight: balanced
+  max_features: 2
   n_jobs: 10
   verbose: 3
+pp_args:
+  sacc_minimum_distance: 1
+  pp_kwargs:
+    thres_id: 75.0
+    thres_ifa: 0.2
+    thres_ifi: 75.0
+    thres_sd_s: 3
+    thres_pd: 3
+    thres_isi: 25.0
+    thres_sd_lo: 6.0
+    thres_sd_hi: 150.0
+    thres_fd: 50.0
+event_map:
+  '1': 1
+  '2': 2
+  '3': 1
+  '4': 1
+  '5': 5
+  '0': 0

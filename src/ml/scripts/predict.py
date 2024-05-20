@@ -21,8 +21,9 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
-    LookAtPointDataMiddleLabelModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
+)
 from ml.engines.system import LitModule
 
 

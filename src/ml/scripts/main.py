@@ -11,8 +11,9 @@ sys.path.append(project_root)
 # main.py
 from lightning.pytorch.cli import LightningCLI
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
-    LookAtPointDataMiddleLabelModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
+    LookAtPointDataMiddleLabelModule,
+)
 from ml.engines.system import LitModule
 from ml.models.modelLSTMmiddleLabel import TorchModel
 

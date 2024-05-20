@@ -22,10 +22,8 @@ project_root = os.path.abspath(
 sys.path.append(project_root)
 
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import \
-    LookAtPointDataModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
 from ml.engines.system import LitModule
-from ml.models.model1 import TorchModel
 from ml.models.modelLSTMmiddleLabel import TorchModel
 from ml.utils.constants import DATA_DIR, EXPERIMENTS_DIR, LOGGING_DIR
 
