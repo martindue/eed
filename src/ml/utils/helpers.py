@@ -3,7 +3,7 @@ import numpy as np
 
 def vcorrcoef(X, Y):
     """
-    NumPy vectorized correlation coefficient
+    NumPy correlation coefficient
     adapted from:
     https://waterprogramming.wordpress.com/2014/06/13/numpy-vectorized-correlation-coefficient/
     """
@@ -11,6 +11,27 @@ def vcorrcoef(X, Y):
     Ym = Y - np.mean(Y)
     r_num = np.sum(Xm * Ym)
     r_den = np.sqrt(np.sum(Xm**2) * np.sum(Ym**2))
+    return r_num / r_den
+
+def vcorrcoef_rolling(X,Y, window_size):
+    
+    Xm = X - X.rolling(window_size, center=True).mean().bfill().ffill()
+    Ym = Y - Y.rolling(window_size,center=True).mean().bfill().ffill()
+    
+    r_num = Xm*Ym
+    r_den = np.sqrt(np.sum(Xm**2) * np.sum(Ym**2))
+    return r_num / r_den
+
+def vcorrcoef_vec(X,Y):
+    '''
+    NumPy vectorized correlation coefficient
+    adapted from:
+    https://waterprogramming.wordpress.com/2014/06/13/numpy-vectorized-correlation-coefficient/
+    '''
+    Xm = X - np.reshape(np.mean(X,axis=1),(X.shape[0],1))
+    Ym = Y - np.reshape(np.mean(Y,axis=1),(Y.shape[0],1))
+    r_num = np.sum(Xm*Ym,axis=1)
+    r_den = np.sqrt(np.sum(Xm**2,axis=1) * np.sum(Ym**2, axis=1))
     return r_num / r_den
 
 def linear_interpol_with_pandas(X):

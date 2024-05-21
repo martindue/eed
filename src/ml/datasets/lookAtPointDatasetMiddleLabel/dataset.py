@@ -11,7 +11,8 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 x = os.path.dirname(__file__)
-from ...utils.helpers import vcorrcoef
+print(x)
+from ...utils.helpers import vcorrcoef_rolling
 
 
 def get_window_indices(data, window_params):
@@ -113,6 +114,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self.pre_window_indices = None
         self.center_window_indices = None
         self.post_window_indices = None
+        self.window_size = long_window_size
         self.window_size_dir = window_size_dir
         self.window_size_vel = window_size_vel
         self.presaved_features = None
@@ -207,53 +209,10 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 print("Noise level ", noise_level)
                 # add noise and extract features
                 aug_data = add_normal_noise(self.data, noise_level)
+                feature_dict = {}
                 dict_list = []
-                
-                # differentiate the data to get velocity and acceleration
-                vel_data = np.hypot(
-                    sg.savgol_filter(aug_data[:, 0], self.window_size_vel, 2, 1, axis=0),
-                    sg.savgol_filter(aug_data[:, 1], self.window_size_vel, 2, 1, axis=0)
-                )*self.fs
-                acc_data = np.hypot(
-                    sg.savgol_filter(aug_data[:, 0], self.window_size_vel, 2, 2, axis=0),
-                    sg.savgol_filter(aug_data[:, 1], self.window_size_vel, 2, 2, axis=0)
-                )*self.fs**2
-                # take a moving average of the acceleration, using pandas
-                acc_data_averaged = pd.DataFrame(acc_data).rolling(window=self.window_size_vel, center=True).mean().bfill().ffill().values
 
-                print("Vel_window_len: ", self.window_size_vel)
-                print("normal window size: ", self.center_window_indices[200].stop - self.center_window_indices[200].start )
-                for idx in tqdm(
-                    range(len(self.center_window_indices)), desc="Extracting features"
-                ):
-                    pre_window = self.pre_window_indices[idx]
-                    center_window = self.center_window_indices[idx]
-                    post_window = self.post_window_indices[idx]
-
-                    pre_window_data = aug_data[pre_window]
-                    center_window_data = aug_data[center_window]
-                    post_window_data = aug_data[post_window]
-
-
-                    midpoint = len(center_window_data)//2
-                    dir_window_data = center_window_data[(midpoint-self.window_size_dir): (midpoint + self.window_size_dir)]
-
-                    middleOfWindow = (center_window.start + center_window.stop) // 2
-
-                    features = self.extract_features(
-                        center_window,
-                        pre_window_data,
-                        center_window_data,
-                        post_window_data,
-                        dir_window_data,
-                        vel_data[middleOfWindow],
-                        acc_data[middleOfWindow],
-                        acc_data_averaged[middleOfWindow]
-                    )
-
-                    dict_list.append(features)
-                features_df = pd.DataFrame.from_records(dict_list)
-
+                features_df = self.extract_features(aug_data[:,0], aug_data[:,1])
                 # save augmentation as parquet
                 features_df.to_parquet(
                     os.path.join(
@@ -337,126 +296,84 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                 "file_name": self.file_names[self.presaved_features.iat[idx, 5]],
                 "file_index": self.presaved_features.iat[idx, 5],
             }
-
-    def extract_features(
-        self, center_window, pre_window_data, center_window_data, post_window_data, dir_window_data, vel, acc, acc_averaged
-    ):  
-        pre_x_windowed = pre_window_data[:, 0]
-        pre_y_windowed = pre_window_data[:, 1]
-
-        c_x_windowed = center_window_data[:, 0]
-        c_y_windowed = center_window_data[:, 1]
-        c_x_windowed_dx = np.diff(c_x_windowed)
-        c_y_windowed_dy = np.diff(c_y_windowed)
-
-        post_x_windowed = post_window_data[:, 0]
-        post_y_windowed = post_window_data[:, 1]
-
-        x_dir_windowed = dir_window_data[:, 0]
-        y_dir_windowed = dir_window_data[:, 1]
-
-        middlePoint = (center_window.start + center_window.stop) // 2
-
-        label = self.labels.values[
-            middlePoint
-        ]  # The label corresponds to the middle element in the center window
-
-        t = self.data_df.iat[middlePoint, 0]
-        x = self.data_df.iat[middlePoint, 1]
-        y = self.data_df.iat[middlePoint, 2]
-        status = self.data_df.iat[middlePoint, 3]
-        file_index = self.data_df.iat[middlePoint, 5]
-
-        features = dict()
-
-        features["t"] = t  # 0
-        features["x"] = x  # 1
-        features["y"] = y  # 2
-        features["status"] = status  # 3
-        features["label"] = label  # 4
-        features["file_index"] = file_index  # 5
-        features["file_name"] = self.file_names[file_index]  # 6
-
-        fs = 1000  # TODO: Extract fs from timestamps in data.
-        features["fs"] = fs
-
-        for d, dd in zip(
-            ["x", "y"],
-            [(pre_x_windowed, post_x_windowed), (pre_y_windowed, post_y_windowed)],
-        ):
-            # difference between positions of preceding and succeding windows,
-            # aka tobii feature, together with data quality features and its variants
-            features["mean-diff-%s" % d] = np.nanmean(dd[0]) - np.nanmean(dd[1])
-            features["med-diff-%s" % d] = np.nanmedian(dd[0]) - np.nanmedian(dd[1])
-
-            # standard deviation
-            features["std-pre-%s" % d] = np.nanstd(dd[0])
-            features["std-post-%s" % d] = np.nanstd(dd[1])
-
-        std_x = np.nanstd(c_x_windowed)
-        std_y = np.nanstd(c_y_windowed)
-
-        features["std"] = np.hypot(std_x, std_y)
-        features["std-diff"] = np.abs(np.hypot(
-            features["std-post-x"], features["std-post-y"]
-        ) - np.hypot(features["std-pre-x"], features["std-pre-y"]))
-
-        features["mean-diff"] = np.hypot(
-            features["mean-diff-x"], features["mean-diff-y"]
-        )
-        features["med-diff"] = np.hypot(
-            features["med-diff-x"], features["med-diff-y"]
-        )  
         
-        del features["std-pre-x"]
-        del features["std-pre-y"]
-        del features["std-post-x"]
-        del features["std-post-y"]
-        del features["mean-diff-x"]
-        del features["mean-diff-y"]
-        del features["med-diff-x"]
-        del features["med-diff-y"]
+    def extract_features(self, x,y):
+        x_df = pd.DataFrame(x)
+        y_df = pd.DataFrame(y)
+        feature_dict = {}
+        # differentiate the data to get velocity and acceleration
+        vel_data = np.hypot(
+            sg.savgol_filter(x, self.window_size_vel, 2, 1, axis=0),
+            sg.savgol_filter(y, self.window_size_vel, 2, 1, axis=0)
+        )*self.fs
+        acc_data = np.hypot(
+            sg.savgol_filter(x, self.window_size_vel, 2, 2, axis=0),
+            sg.savgol_filter(y, self.window_size_vel, 2, 2, axis=0)
+        )*self.fs**2
+        # take a moving average of the acceleration, using pandas
+        acc_data_averaged = pd.DataFrame(acc_data).rolling(window=self.window_size_vel, center=True).mean().bfill().ffill().values
+        
+        feature_dict["t"] = self.data_df["t"].values
+        feature_dict["x"] = self.data_df["x"].values
+        feature_dict["y"] = self.data_df["y"].values
+        feature_dict["status"] = self.data_df["status"].values
+        feature_dict["label"] = self.labels.values
+        feature_dict["file_index"] = self.data_df["file_index"].values
+        feature_dict["file_name"] = [self.file_names[i] for i in self.data_df["file_index"].values]
+
+        feature_dict["vel"] = vel_data
+        feature_dict["acc"] = acc_data
+        feature_dict["acc_averaged"] = acc_data_averaged.flatten()
+
+        std_x = x_df.rolling(window=self.window_size, center=True).std().bfill().ffill().values.flatten()
+        std_y = y_df.rolling(window=self.window_size, center=True).std().bfill().ffill().values.flatten()
+        std = np.hypot(std_x, std_y)
+        feature_dict["std"] = std
+        feature_dict["std-diff"] = np.abs(np.roll(std, -(self.window_size-1)//2) - np.roll(std, (self.window_size-1)//2))
+
+        mean_diff_x = x_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).mean() - x_df.shift(self.window_size//2).rolling(window=self.window_size, center=False).mean()
+        mean_diff_y = y_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).mean() - y_df.shift(self.window_size//2).rolling(window=self.window_size, center=False).mean() 
+        mean_diff = np.hypot(mean_diff_x.ffill().bfill().values.flatten(), mean_diff_y.ffill().bfill().values.flatten())
+
+        feature_dict["mean-diff"] = mean_diff  
+
+        med_diff_x = x_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).median() - x_df.shift(self.window_size//2).rolling(window=self.window_size, center=True).median()
+        med_diff_y = y_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).median() - y_df.shift(self.window_size//2).rolling(window=self.window_size, center=True).median()
+        med_diff = np.hypot(med_diff_x.ffill().bfill().values.flatten(), med_diff_y.ffill().bfill().values.flatten())
+
+        feature_dict["med-diff"] = med_diff
+
+
 
         # bcea
-        bcea_pre = calculate_bcea(pre_x_windowed, pre_y_windowed)
-        bcea_center = calculate_bcea(c_x_windowed, c_y_windowed)
-        bcea_post = calculate_bcea(post_x_windowed, post_y_windowed)
-
-        features["bcea"] = bcea_center
-        features["bcea_diff"] = np.abs(bcea_post - bcea_pre)
+        P = 0.68
+        k = np.log(1 / (1 - P))
+        rho = vcorrcoef_rolling(x_df, y_df,self.window_size)
+        feature_dict["bcea"] = 2*k*np.pi*std_x*std_y* np.sqrt(1-np.power(rho,2)).values.flatten()
+        
+        #bcea_diff
+        feature_dict['bcea-diff-directional'] = np.roll(feature_dict['bcea'], -(self.window_size-1)//2) - \
+                    np.roll(feature_dict['bcea'], (self.window_size-1)//2)
+        feature_dict['bcea-diff-abs'] = np.abs(feature_dict['bcea-diff-directional'])
 
         # RMS
-        features["rms"] = np.hypot(
-            np.sqrt(np.mean(np.square(c_x_windowed_dx))),
-            np.sqrt(np.mean(np.square(c_y_windowed_dy))),
-        )
-        features["rms-diff"] = np.abs(np.hypot(
-            np.sqrt(np.mean(np.square(post_x_windowed))),
-            np.sqrt(np.mean(np.square(post_y_windowed))),
-        ) - np.hypot(
-            np.sqrt(np.mean(np.square(pre_x_windowed))),
-            np.sqrt(np.mean(np.square(pre_y_windowed))),
-        ))
+        rms_x = np.sqrt(np.square(x_df).rolling(window=self.window_size, center=True).mean().bfill().ffill().values.flatten())
+        rms_y = np.sqrt(np.square(y_df).rolling(window=self.window_size, center=True).mean().bfill().ffill().values.flatten())
+        feature_dict["rms"] = np.hypot(rms_x, rms_y)
 
-        # dispersion, aka idt feature
-        x_range = np.nanmax(c_x_windowed) - np.nanmin(c_x_windowed)
-        y_range = np.nanmax(c_y_windowed) - np.nanmin(c_y_windowed)
-        features["disp"] = x_range + y_range
+        feature_dict["rms-diff"] = np.roll(feature_dict["rms"], -(self.window_size-1)//2) - np.roll(feature_dict["rms"], (self.window_size-1)//2)
 
-        
-        #velocity and acceleration
-        #vel_window_len = len(x_vel_windowed)
-        #features['vel']=np.nanmean(np.hypot(sg.savgol_filter(x_vel_windowed,vel_window_len-1, 2, 1),
-        #                         sg.savgol_filter(y_vel_windowed, vel_window_len-1, 2, 1))*fs)
-#
-        #features['acc']=np.nanmean(np.hypot(sg.savgol_filter(x_vel_windowed, vel_window_len-1, 2, 2),
-        #                         sg.savgol_filter(y_vel_windowed, vel_window_len-1, 2, 2))*fs**2)
+        # dispersion
+        x_range = x_df.rolling(window=self.window_size, center=True).max().bfill().ffill().values.flatten() - x_df.rolling(window=self.window_size, center=True).min().bfill().ffill().values.flatten()
+        y_range = y_df.rolling(window=self.window_size, center=True).max().bfill().ffill().values.flatten() - y_df.rolling(window=self.window_size, center=True).min().bfill().ffill().values.flatten()
+        feature_dict["disp"] = x_range + y_range
 
-        features["vel"] = vel
-        features["acc"] = acc
-
-        features["acc_averaged"] = acc_averaged
         # rayleightest
-        angl = np.arctan2(y_dir_windowed, x_dir_windowed)
-        features["rayleightest"] = ast.rayleightest(angl)
-        return features
+        angl = np.arctan2(y_df.rolling(window=self.window_size_dir, center=True).mean().bfill().ffill().values.flatten(), x_df.rolling(window=self.window_size_dir, center=True).mean().bfill().ffill().values.flatten())
+        feature_dict["rayleightest"] = ast.rayleightest(angl)
+
+        features_df = pd.DataFrame.from_dict(feature_dict)
+
+        return features_df
+
+ 
