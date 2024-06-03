@@ -48,7 +48,7 @@ jobs:
         "0": 0
     }
 log_dir: /home/martin/Documents/Exjobb/eed/.experiments
-study_name: TestSweep15
-n_trials: 20
+study_name: TestSweep16
+n_trials: 100
 objective_metrics:
 - IoU_mcc

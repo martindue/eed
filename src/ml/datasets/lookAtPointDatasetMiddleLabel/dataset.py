@@ -101,6 +101,7 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         sklearn: bool = False,
         training_datasets: list[str] = [],
         debugMode: bool = False,
+        savgol_filter_window: int = 21,
     ):
         self.noise_levels = noise_levels
         self.print_extractionTime = print_extractionTime
@@ -114,18 +115,23 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self.pre_window_indices = None
         self.center_window_indices = None
         self.post_window_indices = None
-        self.window_size = long_window_size
-        self.window_size_dir = window_size_dir
-        self.window_size_vel = window_size_vel
+        self.window_size_time = long_window_size
+        self.window_size_dir_time = window_size_dir
+        self.window_size_vel_time = window_size_vel
+        self.window_size_samples = None
+        self.window_size_dir_samples = None
+        self.window_size_vel_samples = None
         self.presaved_features = None
         self.file_names = []
         self.sklearn = sklearn
         self.training_datasets = training_datasets
         self.debugMode = debugMode
-        self.fs = 1000
+        self.fs = None
+        self.savgol_filter_window = savgol_filter_window
 
         self.load_data()
         self.interpolate_nan_values()
+        self.calculate_window_sizes()
         self.setup_window_indices(long_window_size, window_size_vel, window_size_dir)
         self.setup_augmented_data()
 
@@ -153,12 +159,18 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         for load_dir in load_dirs:
             if os.path.exists(load_dir) and os.listdir(load_dir):
                 file_list = os.listdir(load_dir)
-                numpy_files = [f for f in file_list if f.endswith(".npy")]
                 file_names.extend(file_list)
-            for file_name in numpy_files:
+
+                files_to_load = [f for f in file_list if f.endswith(".npy") or f.endswith(".csv")]
+            for file_name in files_to_load:
                 file_path = os.path.join(load_dir, file_name)
-                loaded_array = np.load(file_path)
-                df = pd.DataFrame(loaded_array)
+                if file_name.endswith(".npy"):
+                    df = pd.DataFrame(np.load(file_path))
+                elif file_name.endswith(".csv"):
+                    df = pd.read_csv(file_path)
+                else:
+                    raise ValueError("Unsupported file format")
+                
                 df["file_index"] = file_idx
                 file_idx += 1
                 if appended_df is None:
@@ -181,6 +193,39 @@ class LookAtPointDatasetMiddleLabel(Dataset):
                     self.data[:, i][~nan_indices],
                 )
 
+    def calculate_window_sizes(self):
+        fs = self.calculate_fs(self.data_df)
+        self.fs = fs
+        self.window_size_samples = max(int(self.window_size_time/1000 * fs),3)
+        self.window_size_dir_samples = max(int(self.window_size_dir_time/1000 * fs),3)
+        self.window_size_vel_samples = max(int(self.window_size_vel_time/1000 * fs),3)
+
+        #self.savgol_filter_window = max(self.window_size_vel_samples,21)
+    
+        print("Window size samples: ", self.window_size_samples,)
+        print("Window size dir samples: ", self.window_size_dir_samples)
+        print("Window size vel samples: ", self.window_size_vel_samples)
+        print("Savgol filter window: ", self.savgol_filter_window)
+
+    def calculate_fs(self, df, time_column='t'):
+
+        # Ensure the time column is in datetime format
+        #df[time_column] = pd.to_datetime(df[time_column])
+        temp_df = pd.DataFrame()
+        # Calculate the time differences between consecutive rows
+        temp_df['time_diff'] = df[time_column].diff()
+
+        # Remove the first row because its time_diff will be NaT (Not a Time)
+        temp_df = temp_df.dropna(subset=['time_diff'])
+
+        # Calculate the most common interval (mode)
+        sample_rate = round(1/temp_df['time_diff'].mode()[0])
+
+        # Print the sample rate
+        print(f'Sample rate: {sample_rate} Hz')
+        return sample_rate
+
+
     def setup_window_indices(self, long_window_size: int, window_size_vel: int, window_size_dir: int):
         (
             self.pre_window_indices,
@@ -202,24 +247,24 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             os.makedirs(aug_dir)
 
         for i, noise_level in enumerate(self.noise_levels):
-            if not any(
-                f"augmented_data_{i}_noise_{noise_level}" in file
-                for file in os.listdir(aug_dir)
-            ):
-                print("Noise level ", noise_level)
-                # add noise and extract features
-                aug_data = add_normal_noise(self.data, noise_level)
-                feature_dict = {}
-                dict_list = []
+            #if not any(
+            #    f"augmented_data_{i}_noise_{noise_level}" in file
+            #    for file in os.listdir(aug_dir)
+            #):
+            print("Noise level ", noise_level)
+            # add noise and extract features
+            aug_data = add_normal_noise(self.data, noise_level)
+            feature_dict = {}
+            dict_list = []
 
-                features_df = self.extract_features(aug_data[:,0], aug_data[:,1])
-                # save augmentation as parquet
-                features_df.to_parquet(
-                    os.path.join(
-                        aug_dir,
-                        f"augmented_data_{i}_noise_{noise_level}_{self.split}.parquet",
-                    )
+            features_df = self.extract_features(aug_data[:,0], aug_data[:,1])
+            # save augmentation as parquet
+            features_df.to_parquet(
+                os.path.join(
+                    aug_dir,
+                    f"augmented_data_{i}_noise_{noise_level}_{self.split}.parquet",
                 )
+            )
 
         # load parquet files and append them to the original data
         df_list = None
@@ -303,15 +348,15 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         feature_dict = {}
         # differentiate the data to get velocity and acceleration
         vel_data = np.hypot(
-            sg.savgol_filter(x, self.window_size_vel, 2, 1, axis=0),
-            sg.savgol_filter(y, self.window_size_vel, 2, 1, axis=0)
+            sg.savgol_filter(x, self.savgol_filter_window, 3, 1, axis=0),
+            sg.savgol_filter(y, self.savgol_filter_window, 3, 1, axis=0)
         )*self.fs
         acc_data = np.hypot(
-            sg.savgol_filter(x, self.window_size_vel, 2, 2, axis=0),
-            sg.savgol_filter(y, self.window_size_vel, 2, 2, axis=0)
+            sg.savgol_filter(x, self.savgol_filter_window, 3, 2, axis=0),
+            sg.savgol_filter(y, self.savgol_filter_window, 3, 2, axis=0)
         )*self.fs**2
         # take a moving average of the acceleration, using pandas
-        acc_data_averaged = pd.DataFrame(acc_data).rolling(window=self.window_size_vel, center=True).mean().bfill().ffill().values
+        acc_data_averaged = pd.DataFrame(acc_data).rolling(window=self.window_size_vel_samples, center=True).mean().bfill().ffill().values
         
         feature_dict["t"] = self.data_df["t"].values
         feature_dict["x"] = self.data_df["x"].values
@@ -325,20 +370,20 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         feature_dict["acc"] = acc_data
         feature_dict["acc_averaged"] = acc_data_averaged.flatten()
 
-        std_x = x_df.rolling(window=self.window_size, center=True).std().bfill().ffill().values.flatten()
-        std_y = y_df.rolling(window=self.window_size, center=True).std().bfill().ffill().values.flatten()
+        std_x = x_df.rolling(window=self.window_size_samples, center=True).std().bfill().ffill().values.flatten()
+        std_y = y_df.rolling(window=self.window_size_samples, center=True).std().bfill().ffill().values.flatten()
         std = np.hypot(std_x, std_y)
         feature_dict["std"] = std
-        feature_dict["std-diff"] = np.abs(np.roll(std, -(self.window_size-1)//2) - np.roll(std, (self.window_size-1)//2))
+        feature_dict["std-diff"] = np.abs(np.roll(std, -(self.window_size_samples-1)//2) - np.roll(std, (self.window_size_samples-1)//2))
 
-        mean_diff_x = x_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).mean() - x_df.shift(self.window_size//2).rolling(window=self.window_size, center=False).mean()
-        mean_diff_y = y_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).mean() - y_df.shift(self.window_size//2).rolling(window=self.window_size, center=False).mean() 
+        mean_diff_x = x_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).mean() - x_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=False).mean()
+        mean_diff_y = y_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).mean() - y_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=False).mean() 
         mean_diff = np.hypot(mean_diff_x.ffill().bfill().values.flatten(), mean_diff_y.ffill().bfill().values.flatten())
 
         feature_dict["mean-diff"] = mean_diff  
 
-        med_diff_x = x_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).median() - x_df.shift(self.window_size//2).rolling(window=self.window_size, center=True).median()
-        med_diff_y = y_df.shift(-self.window_size//2).rolling(window=self.window_size, center=True).median() - y_df.shift(self.window_size//2).rolling(window=self.window_size, center=True).median()
+        med_diff_x = x_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).median() - x_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).median()
+        med_diff_y = y_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).median() - y_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).median()
         med_diff = np.hypot(med_diff_x.ffill().bfill().values.flatten(), med_diff_y.ffill().bfill().values.flatten())
 
         feature_dict["med-diff"] = med_diff
@@ -348,29 +393,31 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         # bcea
         P = 0.68
         k = np.log(1 / (1 - P))
-        rho = vcorrcoef_rolling(x_df, y_df,self.window_size)
+        rho = vcorrcoef_rolling(x_df, y_df,self.window_size_samples)
         feature_dict["bcea"] = 2*k*np.pi*std_x*std_y* np.sqrt(1-np.power(rho,2)).values.flatten()
         
         #bcea_diff
-        feature_dict['bcea-diff-directional'] = np.roll(feature_dict['bcea'], -(self.window_size-1)//2) - \
-                    np.roll(feature_dict['bcea'], (self.window_size-1)//2)
-        feature_dict['bcea-diff-abs'] = np.abs(feature_dict['bcea-diff-directional'])
+        feature_dict['bcea-diff-directional'] = np.roll(feature_dict['bcea'], -(self.window_size_samples-1)//2) - \
+                    np.roll(feature_dict['bcea'], (self.window_size_samples-1)//2)
+        feature_dict['bcea-diff'] = np.abs(feature_dict['bcea-diff-directional'])
+        del feature_dict['bcea-diff-directional']
+
 
         # RMS
-        rms_x = np.sqrt(np.square(x_df).rolling(window=self.window_size, center=True).mean().bfill().ffill().values.flatten())
-        rms_y = np.sqrt(np.square(y_df).rolling(window=self.window_size, center=True).mean().bfill().ffill().values.flatten())
+        rms_x = np.sqrt(np.square(x_df).rolling(window=self.window_size_samples, center=True).mean().bfill().ffill().values.flatten())
+        rms_y = np.sqrt(np.square(y_df).rolling(window=self.window_size_samples, center=True).mean().bfill().ffill().values.flatten())
         feature_dict["rms"] = np.hypot(rms_x, rms_y)
 
-        feature_dict["rms-diff"] = np.roll(feature_dict["rms"], -(self.window_size-1)//2) - np.roll(feature_dict["rms"], (self.window_size-1)//2)
+        feature_dict["rms-diff"] = np.roll(feature_dict["rms"], -(self.window_size_samples-1)//2) - np.roll(feature_dict["rms"], (self.window_size_samples-1)//2)
 
         # dispersion
-        x_range = x_df.rolling(window=self.window_size, center=True).max().bfill().ffill().values.flatten() - x_df.rolling(window=self.window_size, center=True).min().bfill().ffill().values.flatten()
-        y_range = y_df.rolling(window=self.window_size, center=True).max().bfill().ffill().values.flatten() - y_df.rolling(window=self.window_size, center=True).min().bfill().ffill().values.flatten()
+        x_range = x_df.rolling(window=self.window_size_samples, center=True).max().bfill().ffill().values.flatten() - x_df.rolling(window=self.window_size_samples, center=True).min().bfill().ffill().values.flatten()
+        y_range = y_df.rolling(window=self.window_size_samples, center=True).max().bfill().ffill().values.flatten() - y_df.rolling(window=self.window_size_samples, center=True).min().bfill().ffill().values.flatten()
         feature_dict["disp"] = x_range + y_range
 
         # rayleightest
-        angl = np.arctan2(y_df.rolling(window=self.window_size_dir, center=True).mean().bfill().ffill().values.flatten(), x_df.rolling(window=self.window_size_dir, center=True).mean().bfill().ffill().values.flatten())
-        feature_dict["rayleightest"] = ast.rayleightest(angl)
+        #angl = np.arctan2(y_df.rolling(window=self.window_size_dir_samples, center=True).mean().bfill().ffill().values.flatten(), x_df.rolling(window=self.window_size_dir_samples, center=True).mean().bfill().ffill().values.flatten())
+        #feature_dict["rayleightest"] = ast.rayleightest(angl)
 
         features_df = pd.DataFrame.from_dict(feature_dict)
 

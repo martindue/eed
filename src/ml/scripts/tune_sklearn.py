@@ -77,11 +77,20 @@ def calculate_metrics(data_gt, data_pr, job):
 
 
 def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) -> float:
+
+    window_size = trial.suggest_int("window_size", 50, 300)
+    window_size_vel = trial.suggest_int("window_size_vel", 48, 200)
+    savgol_filter_width = trial.suggest_int("savgol_filter_width", 3, 30)
+
     data_module = LookAtPointDataMiddleLabelModule(
         data_dir=args.data.data_dir,
         sklearn=True,
         training_datasets=args.data.training_datasets,
+        window_size=window_size, 
+        savgol_filter_window=savgol_filter_width,
+        window_size_vel=window_size_vel,
     )
+
     data_module.prepare_data()
     data_module.setup(stage="fit")
     train_data_loader = data_module.train_dataloader()
@@ -140,16 +149,17 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
 
     if classifier_name == "RandomForest":
         classifier_obj = RandomForestClassifier()
-        rf_config = {
-            "n_estimators": trial.suggest_int("n_estimators", 8, 48),
-            "max_depth": trial.suggest_int("max_depth", 1, 32),
-            "class_weight": trial.suggest_categorical(
-                "class_weight", ["balanced", "balanced_subsample"]
-            ),
-            "max_features": trial.suggest_int("max_features", 1, 6),
-            "n_jobs": args.data.num_workers,
-            "verbose": 3,
-        }
+        #rf_config = {
+        #    "n_estimators": trial.suggest_int("n_estimators", 8, 48),
+        #    "max_depth": trial.suggest_int("max_depth", 1, 32),
+        #    "class_weight": trial.suggest_categorical(
+        #        "class_weight", ["balanced", "balanced_subsample"]
+        #    ),
+        #    "max_features": trial.suggest_int("max_features", 1, 6),
+        #    "n_jobs": args.data.num_workers,
+        #    "verbose": 3,
+        #}
+        rf_config = {"n_estimators": 40}
         classifier_obj.set_params(**rf_config)
     elif classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)

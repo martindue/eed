@@ -96,7 +96,8 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         print_extractionTime: bool = False,
         max_presaved_epochs: int = 99,
         noise_levels: list = [0],
-        training_datasets: list[str] = ["lund2013"],
+        training_datasets: list[str] = [],#["lund2013"],
+        savgol_filter_window :int =10, 
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -111,6 +112,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
         self.max_presaved_epochs = max_presaved_epochs
         self.noise_levels = noise_levels
         self.training_datasets = training_datasets
+        self.savgol_filter_window = savgol_filter_window 
 
     def setup(self, stage=None):
         # Load dataset
@@ -126,6 +128,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             split="train",
             sklearn=self.sklearn,
             training_datasets=self.training_datasets,
+            savgol_filter_window = self.savgol_filter_window
         )
         print("sklearn:", self.sklearn)
         data_len = len(self.train_dataset)

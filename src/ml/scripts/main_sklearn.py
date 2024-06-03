@@ -208,6 +208,11 @@ def main(
     print("Fitting classifier.... ")
     clf.fit(X_train, y_train)
 
+    # save the classifier
+    import joblib
+    joblib.dump(clf, "classifier.joblib")
+
+
     # Make predictions and save them
     print("Predicting on train data....")
     make_predictions_and_save(

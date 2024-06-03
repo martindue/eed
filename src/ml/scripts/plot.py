@@ -39,8 +39,8 @@ def main():
     # Define the path to the predictions and ground truths files
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     odir = args.output
-    fpath_pr = ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_pd.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_pd.csv"
-    fpath_gt = ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_gt.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_gt.csv"
+    fpath_pr = ".experiments/results/sklearn/validation/2024-05-23_11h13.15.026_eed-saccade-fixation_746530_pd.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_pd.csv"
+    fpath_gt = ".experiments/results/sklearn/validation/2024-05-23_11h13.15.026_eed-saccade-fixation_746530_gt.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_gt.csv"
 
     # Get the filename
     _pr = os.path.splitext(os.path.basename(fpath_pr))[0]
