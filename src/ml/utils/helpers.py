@@ -19,7 +19,7 @@ def vcorrcoef_rolling(X,Y, window_size):
     Ym = Y - Y.rolling(window_size,center=True).mean().bfill().ffill()
     
     r_num = Xm*Ym
-    r_den = np.sqrt(np.sum(Xm**2) * np.sum(Ym**2))
+    r_den = np.sqrt(np.sum(Xm**2, axis=0) * np.sum(Ym**2, axis=0))
     return r_num / r_den
 
 def vcorrcoef_vec(X,Y):
