@@ -16,7 +16,7 @@ project_root = os.path.abspath(
 )  # Assuming the project root is two directories above src
 sys.path.append(project_root)
 
-from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataModule
+from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import LookAtPointDataMiddleLabelModule
 from ml.engines.system import LitModule
 
 
@@ -40,7 +40,7 @@ def objective_function(
 
 def main():
     parser = LightningArgumentParser()
-    parser.add_class_arguments(LookAtPointDataModule, "data")
+    parser.add_class_arguments(LookAtPointDataMiddleLabelModule, "data")
     parser.add_class_arguments(LitModule, "model")
     parser.add_class_arguments(lp.Trainer, "trainer")
     parser.add_optimizer_args()

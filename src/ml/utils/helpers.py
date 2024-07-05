@@ -1,5 +1,5 @@
 import numpy as np
-
+import scipy.io as scio
 
 def vcorrcoef(X, Y):
     """
@@ -33,6 +33,45 @@ def vcorrcoef_vec(X,Y):
     r_num = np.sum(Xm*Ym,axis=1)
     r_den = np.sqrt(np.sum(Xm**2,axis=1) * np.sum(Ym**2, axis=1))
     return r_num / r_den
+
+
+def flip_heading(log, col):
+    # Flip WCS for selected recordings: applies for Simulator SEP logs
+    mask = log[col].values < 0
+    log.loc[mask, col] = np.pi + log.loc[mask, col]
+    mask = np.logical_or(mask, log[col].values == 0)
+    log.loc[~mask, col] = -(np.pi - log.loc[~mask, col])
+    return log
+##
+# mat utils
+def mat_check_keys(mat):
+    """
+    Checks if entries in dictionary are mat-objects
+    and converts them to nested dictionaries
+    """
+    for key in mat:
+        if isinstance(mat[key], scio.matlab.mio5_params.mat_struct):
+            mat[key] = mat2dict(mat[key])
+    return mat
+def mat2dict(matobj):
+    """
+    A recursive function that constructs nested dictionaries from matobjects
+    """
+    dictionary = {}
+    for strg in matobj._fieldnames:
+        elem = matobj.__dict__[strg]
+        if isinstance(elem, scio.matlab.mio5_params.mat_struct):
+            dictionary[strg] = mat2dict(elem)
+        else:
+            dictionary[strg] = elem
+    return dictionary
+def loadmat(filename):
+    """
+    Replaces spio.loadmat
+    """
+    data = scio.loadmat(filename, struct_as_record=False, squeeze_me=True)
+    return mat_check_keys(data)
+
 
 def linear_interpol_with_pandas(X):
     """

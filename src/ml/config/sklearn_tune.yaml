@@ -9,11 +9,12 @@ data:
   max_presaved_epochs: 99
   noise_levels:
   - 0
-  - 0.1
+  - 0.25
+  - 0.5
   training_datasets:
   - no extra
 pp_args:
-  sacc_minimum_distance: 0.1
+  sacc_minimum_distance: 2
   pp_kwargs:
     thres_id: 75.0
     thres_ifa: 0.2
@@ -48,7 +49,8 @@ jobs:
         "0": 0
     }
 log_dir: /home/martin/Documents/Exjobb/eed/.experiments
-study_name: TestSweep16
-n_trials: 100
+study_name: random_forest_SEdata_synthData_1
+n_trials: 1000
 objective_metrics:
 - IoU_mcc
+- model_size

@@ -256,7 +256,7 @@ def fixation_merge(df, threshold=1):
     # Group the DataFrame by label changes
     grouped = df.groupby(label_changes)
 
-    # Calculate the pythagorean distances between consecutive groupings with label 1
+    # Calculate the pythagorean distances between consecutive groupings with label 1, and merge them if the distance is below the threshold
     distances = []
     for group_label, group_data in grouped:
         if 1 in group_data["evt"].values:

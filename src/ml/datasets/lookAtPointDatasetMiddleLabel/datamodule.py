@@ -156,6 +156,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             split="val",
             sklearn=self.sklearn,
             training_datasets=self.training_datasets,
+            savgol_filter_window=self.savgol_filter_window
         )
 
         self.test_dataset = LookAtPointDatasetMiddleLabel(
@@ -170,6 +171,8 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             split="test",
             sklearn=self.sklearn,
             training_datasets=self.training_datasets,
+            savgol_filter_window=self.savgol_filter_window
+
         )
 
         if self.sklearn:  # make sure that we always fetch
@@ -185,7 +188,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             self.train_dataset,  # collate_fn=custom_collate_fn,
             batch_size=self.batch_size,
             shuffle=not (self.sklearn),
-            num_workers=self.num_workers,
+            num_workers=0#self.num_workers,
         )
 
     def val_dataloader(self):
@@ -193,7 +196,7 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             shuffle=not (self.sklearn),
-            num_workers=self.num_workers,
+            num_workers=0#self.num_workers,
         )
 
     def test_dataloader(self):
@@ -201,5 +204,5 @@ class LookAtPointDataMiddleLabelModule(LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             shuffle=not (self.sklearn),
-            num_workers=self.num_workers,
+            num_workers=0#self.num_workers,
         )

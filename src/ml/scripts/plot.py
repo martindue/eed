@@ -14,9 +14,11 @@ import eval.misc.utils as utils
 from eval.misc import eval_utils, matching
 
 from ml.utils.classes import job
-
+from ml.utils.helpers import flip_heading
+import numpy as np
 
 def main():
+    sep = True
     parser = ArgumentParser()
     parser.add_class_arguments(job, "jobs")
     parser.add_argument("-c", "--config", action=ActionConfigFile)
@@ -39,8 +41,10 @@ def main():
     # Define the path to the predictions and ground truths files
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     odir = args.output
-    fpath_pr = ".experiments/results/sklearn/validation/2024-05-23_11h13.15.026_eed-saccade-fixation_746530_pd.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_pd.csv"
-    fpath_gt = ".experiments/results/sklearn/validation/2024-05-23_11h13.15.026_eed-saccade-fixation_746530_gt.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_gt.csv"
+    fpath_pr = "/home/martin/Documents/Exjobb/eed/.experiments/results/sklearn/validation/2024-05-24_11h22.04.692_eed-saccade-fixation_635110_pd.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_pd.csv"
+    fpath_gt = "/home/martin/Documents/Exjobb/eed/.experiments/results/sklearn/validation/2024-05-24_11h22.04.692_eed-saccade-fixation_635110_gt.csv"  # ".experiments/results/sklearn/validation/lookAtPoint_EL_S5_gt.csv"
+    sep_gt_path = "/home/martin/Documents/Exjobb/eed/.data/raw/val_data/2024-05-24_11h22.04.692_eed-saccade-fixation_635110.csv"
+    sep_log_path = "/home/martin/Documents/Exjobb/sep_processing/logs/2024-05-24_11h22.04.692_eed-saccade-fixation_635110/2024-05-24_11h22.04.692_eed-saccade-fixation_635110.log"
 
     # Get the filename
     _pr = os.path.splitext(os.path.basename(fpath_pr))[0]
@@ -49,7 +53,8 @@ def main():
     # Check if the files exist
     if not os.path.exists(fpath_pr) or not os.path.exists(fpath_gt):
         print("Error: Predictions or ground truths file not found.")
-        exit()
+        exit()                #files_to_load = [f for f in file_list if f.endswith(".npy") or f.endswith(".csv") or f.endswith(".arff")]
+
     jobs = args.jobs
     matchers = jobs.matchers
     job_label = jobs.label
@@ -63,7 +68,30 @@ def main():
         # add undef label
         event_labels = [0, *event_labels]
 
-    data_gt, data_pr = utils.load_data(fpath_gt, fpath_pr, event_map)
+    if not sep: 
+        data_gt, data_pr = utils.load_data(fpath_gt, fpath_pr, event_map)
+    else: 
+        data_gt = pd.read_csv(sep_gt_path)
+        data_gt.loc[data_gt["evt"] == 3,"evt"] = 1
+
+        log_df = pd.read_csv(sep_log_path, sep="\t")
+        log_df = log_df.drop_duplicates(subset=["FrameNumber"], keep="last").reset_index(
+        drop=True
+        )
+        log_df = flip_heading(log_df, "EstimatedGazeHeading")
+        data_pr = pd.DataFrame()
+        data_pr["t"] = data_gt["t"]
+        data_pr["x"] = log_df["EstimatedGazeHeading"]*180/np.pi
+        data_pr["y"] = log_df["EstimatedGazePitch"]*180/np.pi
+        
+        evt_col = np.zeros((len(log_df), 1))
+
+        evt_col[log_df["Fixation"].to_numpy().nonzero()] = 1
+        evt_col[log_df["Saccade"].to_numpy().nonzero()] = 2
+        print(sum(evt_col))
+        data_pr["evt"] = evt_col
+
+
     event_labels = list(set(event_labels))
     event_matcher = matching.EventMatcher(gt=data_gt, pr=data_pr)
     meta_accum = []

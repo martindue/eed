@@ -5,19 +5,24 @@ data_module:
     sklearn: true
     validation_split: 0.2
     num_workers: 15
-    window_size: 200
-    window_size_vel: 100
+    window_size: 76
+    window_size_vel: 55
     window_size_dir: 100
+    savgol_filter_window: 8
+    noise_levels:
+    - 0
+    - 0.25
+    - 0.5
     training_datasets:
-    - no extra
+    - no_extra
 stage: fit
 classifier_type: sklearn.ensemble.RandomForestClassifier
 rf_config:
-  n_trees: 38
-  max_depth: 30
+  n_trees: 48
+  max_depth: 7
   class_weight: balanced
-  max_features: 2
-  n_jobs: 10
+  max_features: 4
+  n_jobs: 15
   verbose: 3
 pp_args:
   sacc_minimum_distance: 1
