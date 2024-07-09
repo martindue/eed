@@ -188,12 +188,11 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         self.fs = None
         self.savgol_filter_window_time = savgol_filter_window
 
-
         self.load_raw_data()
         #self.calculate_window_sizes()
         #self.setup_window_indices(long_window_size, window_size_vel, window_size_dir)
 
-
+        df_concat = None
         for i, df in enumerate(self.data_df_list):
             self.data = np.stack((df["x"], df["y"]), axis=-1)
             self.interpolate_nan_values()
@@ -201,25 +200,12 @@ class LookAtPointDatasetMiddleLabel(Dataset):
             self.data_df = df
             self.calculate_window_sizes()
 
-                
-            self.setup_augmented_data(os.path.basename(self.load_dirs[i]))
-        
-        self.load_aug_data()
+            features_df = self.extract_features(self.data[:,0], self.data[:,1])
+            if df_concat is None:
+                    df_concat = features_df
+            else:
+                df_concat = pd.concat((df_concat, features_df))
 
-
-    def load_aug_data(self):
-        # load parquet files and append them to the original data
-        df_concat = None
-        for file in os.listdir(self.aug_dir):
-            if any(str(noise_level) in file for noise_level in self.noise_levels) and (any(dataset in file for dataset in self.training_datasets) or self.split == "val" or self.split == "test"):
-                file_path = os.path.join(self.aug_dir, file)
-                df = pd.read_parquet(file_path)
-                if df_concat is None:
-                    df_concat = df
-                else:
-                    df_concat = pd.concat((df_concat, df))
-                print(f"Loaded {file}")
-    
         self.presaved_features = df_concat
 
     def flip_heading(self,log, col):
@@ -439,40 +425,6 @@ class LookAtPointDatasetMiddleLabel(Dataset):
 
     def __len__(self):
         return 1 #len(self.presaved_features)  # number of windows
-
-    # it returns a pandas df with the features
-    def setup_augmented_data(self, name) -> pd.DataFrame:
-        self.aug_dir = os.path.join(self.data_dir, "augmented_data", self.split)
-
-        if not os.path.exists(self.aug_dir):
-            os.makedirs(self.aug_dir)
-
-        for i, noise_level in enumerate(self.noise_levels):
-            #if not any(
-            #    f"augmented_data_{i}_noise_{noise_level}" in file
-            #    for file in os.listdir(aug_dir)
-            #):
-            print("Noise level ", noise_level)
-            # add noise and extract features
-            #aug_data = add_normal_noise(self.data, noise_level)
-            aug_data = self.data
-            feature_dict = {}
-            dict_list = []
-
-            features_df = self.extract_features(aug_data[:,0], aug_data[:,1])
-            
-
-
-            # save augmentation as parquet
-            features_df.to_parquet(
-                os.path.join(
-                    self.aug_dir,
-                    f"augmented_data_{name}_noise_{noise_level}_{self.split}.parquet",
-                )
-            )
-
-
-        return
 
     def online_augmentation(self, idx, noise_level=0.1):
         print("Online augmentation")
