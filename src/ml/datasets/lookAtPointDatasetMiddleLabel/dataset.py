@@ -399,17 +399,6 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         sample_rate = np.mean(sample_rate_list)
         print(f'Sample rate: {sample_rate} Hz')
 
-
-        #temp_df['time_diff'] = df.groupby('file_index')[time_column].diff()
-
-        # Remove the first row because its time_diff will be NaT (Not a Time)
-        #temp_df = temp_df.dropna(subset=['time_diff'])
-
-        # Calculate the most common interval (mode)
-        #sample_rate = round(1/temp_df['time_diff'].mode()[0])
-
-        # Print the sample rate
-        #print(f'Sample rate: {sample_rate} Hz')
         return sample_rate
 
 
@@ -554,8 +543,13 @@ class LookAtPointDatasetMiddleLabel(Dataset):
         std_y = y_df.rolling(window=self.window_size_samples, center=True).std().bfill().ffill().values.flatten()
         std = np.hypot(std_x, std_y)
         feature_dict["std"] = std
-        feature_dict["std-diff"] = np.abs(np.roll(std, -(self.window_size_samples-1)//2) - np.roll(std, (self.window_size_samples-1)//2))
+        std_before = pd.Series(std).shift(-(self.window_size_samples//2)).bfill().ffill().values
+        std_after = pd.Series(std).shift(self.window_size_samples//2).bfill().ffill().values
 
+        # Compute the absolute difference between std_before and std_after
+        std_diff = np.abs(std_after - std_before)
+
+        feature_dict["std-diff"] = std_diff
         mean_diff_x = x_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).mean() - x_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=False).mean()
         mean_diff_y = y_df.shift(-self.window_size_samples//2).rolling(window=self.window_size_samples, center=True).mean() - y_df.shift(self.window_size_samples//2).rolling(window=self.window_size_samples, center=False).mean() 
         mean_diff = np.hypot(mean_diff_x.ffill().bfill().values.flatten(), mean_diff_y.ffill().bfill().values.flatten())

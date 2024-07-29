@@ -5,27 +5,25 @@ data_module:
     sklearn: true
     validation_split: 0.2
     num_workers: 15
-    window_size: 76
-    window_size_vel: 55
-    window_size_dir: 100
-    savgol_filter_window: 8
+    window_size: 122
+    window_size_vel: 237
+    savgol_filter_window: 86
     noise_levels:
     - 0
-    - 0.25
-    - 0.5
     training_datasets:
-    - no_extra
+    - SE_recorded
+    - synthetic_data
 stage: fit
 classifier_type: sklearn.ensemble.RandomForestClassifier
 rf_config:
-  n_trees: 48
-  max_depth: 7
+  n_trees: 32
+  max_depth: 2
   class_weight: balanced
   max_features: 4
   n_jobs: 15
   verbose: 3
 pp_args:
-  sacc_minimum_distance: 1
+  sacc_minimum_distance: 2
   pp_kwargs:
     thres_id: 75.0
     thres_ifa: 0.2
@@ -34,7 +32,7 @@ pp_args:
     thres_pd: 3
     thres_isi: 25.0
     thres_sd_lo: 6.0
-    thres_sd_hi: 150.0
+    thres_sd_hi: 600.0
     thres_fd: 50.0
 event_map:
   '1': 1

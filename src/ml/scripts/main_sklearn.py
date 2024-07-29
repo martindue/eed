@@ -16,6 +16,8 @@ from typing import Type
 
 import numpy as np
 import pandas as pd
+import skl2onnx.helpers.onnx_helper
+
 from jsonargparse import CLI, ArgumentParser
 from lightning.pytorch import LightningDataModule
 from sklearn.base import BaseEstimator
@@ -26,13 +28,49 @@ from ml.datasets.lookAtPointDatasetMiddleLabel.datamodule import (
 )
 from ml.utils.helpers import impute_with_column_means, linear_interpol_with_pandas
 from ml.utils.post_processing import post_process, fixation_merge
+from ml.utils.classes import job
+from skl2onnx import to_onnx
+from eval.misc import eval_utils, matching, utils
+#import eval.misc.utils as utils
 
 
 # Example usage:
 # X_imputed = impute_with_column_means(X)
+def calculate_metrics(data_gt, data_pr, job):
+    matchers = job.matchers
+    job_label = job.label
+    multiclass_strategy = job.multiclass_strategy
+    binary_strategy = job.binary_strategy
+    event_map = job.event_map
+    event_map = utils.keys2num(event_map)
 
+    event_labels = event_map.values()
+    if 0 not in event_map.keys():
+        # add undef label
+        event_labels = [0, *event_labels]
 
-def make_predictions_and_save(classifier, X, output_df, output_dir, pp_args):
+    event_labels = list(set(event_labels))
+    event_matcher = matching.EventMatcher(gt=data_gt, pr=data_pr)
+
+    result_accum = []
+    # run eval
+    for matcher, matching_kwargs in matchers.items():
+        matcher_label = filter(None, (matcher, job_label))
+        matcher_label = {"matcher": "-".join(matcher_label)}
+
+        eval_result = eval_utils.calc_scores(
+            event_matcher=event_matcher,
+            matcher=matcher,
+            matching_kwargs=matching_kwargs,
+            labels=event_labels,
+            multiclass_strategy=multiclass_strategy,
+            binary_strategy=binary_strategy,
+        )
+
+        result_accum.extend(eval_result)
+    return result_accum
+
+def make_predictions_and_save(classifier,classifier_name, X, output_df, output_dir, pp_args):
     # Make predictions
     y_pred = classifier.predict(X)
 
@@ -42,23 +80,20 @@ def make_predictions_and_save(classifier, X, output_df, output_dir, pp_args):
     file_index = output_df["file_index"].values
     gt_output_df = output_df.drop(columns=["file_index", "file_name"])
     unique_file_indices = output_df["file_index"].unique()
+
     print("unique_file_indices: ", unique_file_indices)
 
     pd_output_df = output_df.drop(columns=["file_index", "evt", "file_name"])
     pd_output_df["evt"] = y_pred
 
     # Save predictions for each unique file index
-    for index in unique_file_indices:
+    for  i, cur_file_index in enumerate(unique_file_indices):
         # Filter samples belonging to the current file index
-        mask = file_index == index
+        mask = cur_file_index == file_index
         pd_filtered_df = pd_output_df[mask]
         gt_filtered_df = gt_output_df[mask]
-        file_name = os.path.splitext(unique_file_names[index])[0]
-        # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
+        file_name = os.path.splitext(unique_file_names[i])[0]
 
-        print(f"Saving predictions for {file_name} to {output_dir}...")
-        pd_file_path = os.path.join(output_dir, f"{file_name}_pd.csv")
         #        pd_filtered_df = pd_filtered_df.sort_values(by=["t"]) #should be unnecessary
 
         # post process the predictions
@@ -70,10 +105,23 @@ def make_predictions_and_save(classifier, X, output_df, output_dir, pp_args):
         pd_pp_df = pd_pp_df[mask2]
         gt_filtered_df = gt_filtered_df[mask2]
 
+        job_object = job()
+        gt_filtered_df = gt_filtered_df.reset_index(drop=True)
+        pd_pp_df = pd_pp_df.reset_index(drop=True)
+        scores = calculate_metrics(gt_filtered_df, pd_pp_df, job_object)
+        IoU_mcc = scores[0]["mcc"]
+    
+        print(f"IoU MCC for {file_name}: {IoU_mcc}")
+
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        print(f"Saving predictions for {file_name} to {output_dir}...")
+        pd_file_path = os.path.join(output_dir, f"{file_name}_{classifier_name}_score_{round(IoU_mcc,2)}_pd.csv")
         # Save predictions to a file
         pd_pp_df.to_csv(pd_file_path, index=False)
 
-        gt_file_path = os.path.join(output_dir, f"{file_name}_gt.csv")
+        gt_file_path = os.path.join(output_dir, f"{file_name}_{classifier_name}_score_{round(IoU_mcc,2)}_gt.csv")
         #        gt_filtered_df = gt_filtered_df.sort_values(by=["t"]) #should be unnecessary
         gt_filtered_df.to_csv(gt_file_path, index=False)
 
@@ -105,7 +153,7 @@ def main(
         },
     },
     pre_proc_args: dict = { 
-        "sacc_minimum_distance": 1,
+        "sacc_minimum_distance": 2,
     },
     event_map: dict= {
         "1": 1,
@@ -130,16 +178,34 @@ def main(
             n_jobs=rf_config["n_jobs"],
             verbose=rf_config["verbose"],
         )
+    for data, features, file_name_list in train_data_loader:
+        X_train = features 
+        X_train = X_train.squeeze()
+        for key, value in data.items():
+            data[key] = value.reshape(-1)
+        y_train = data["label"]
+        y_train.numpy()
+        y_train=y_train.squeeze()
+        xx = data["x"]
+        yy = data["y"]
+        t = data["t"]
+        status = data["status"]
+        file_index = data["file_index"]
+        file_name_list = [t[0] for t in file_name_list]
 
-    for batch in train_data_loader:
-        X_train = batch["features"]
-        y_train = batch["label"]
-        t = batch["t"]
-        xx = batch["x"]
-        yy = batch["y"]
-        status = batch["status"]
-        file_index = batch["file_index"]
-        file_name = batch["file_name"]
+        file_name = file_name_list
+
+
+
+   # for batch in train_data_loader:
+   #     X_train = batch["features"]
+   #     y_train = batch["label"]
+   #     t = batch["t"]
+   #     xx = batch["x"]
+   #     yy = batch["y"]
+   #     status = batch["status"]
+   #     file_index = batch["file_index"]
+   #     file_name = batch["file_name"]
     train_df = pd.DataFrame(
         {
             "t": t,
@@ -159,15 +225,18 @@ def main(
 
     train_df.reset_index(drop=True, inplace=True)
     train_df = fixation_merge(train_df, pre_proc_args["sacc_minimum_distance"])
-    for batch in validation_data_loader:
-        X_val = batch["features"]
-        t = batch["t"]
-        xx = batch["x"]
-        yy = batch["y"]
-        y_val = batch["label"]
-        status = batch["status"]
-        file_index = batch["file_index"]
-        file_name = batch["file_name"]
+    for data, features, file_name_list in validation_data_loader:
+        X_val = features.squeeze()
+        for key, value in data.items():
+            data[key] = value.reshape(-1).numpy()
+        t = data["t"]
+        xx = data["x"]
+        yy = data["y"]
+        y_val = data["label"]
+        status = data["status"]
+        file_index = data["file_index"]
+        file_name_list = [t[0] for t in file_name_list]
+        file_name = file_name_list
 
     val_df = pd.DataFrame(
         {
@@ -207,16 +276,18 @@ def main(
     print("dimensions of X and y:", X_train.shape, y_train.shape)
     print("Fitting classifier.... ")
     clf.fit(X_train, y_train)
-
-    # save the classifier
-    import joblib
-    joblib.dump(clf, "classifier.joblib")
+    
+    from skl2onnx import convert_sklearn, to_onnx
+    onx = to_onnx(clf, X_val,target_opset={"":15,'ai.onnx.ml': 3})
+    bytes = skl2onnx.helpers.onnx_helper.save_onnx_model(onx)
+    print(f"Size of onnx model: {len(bytes)} bytes")
 
 
     # Make predictions and save them
     print("Predicting on train data....")
     make_predictions_and_save(
         clf,
+        "RandomForest",
         X_train,
         train_df,
         ".experiments/results/sklearn/train",
@@ -225,11 +296,13 @@ def main(
     print("Predicting on validation data....")
     make_predictions_and_save(
         clf,
+        "RandomForest",
         X_val,
         val_df,
         ".experiments/results/sklearn/validation",
         pp_args=pp_args,
     )
+
 
 
 if __name__ == "__main__":

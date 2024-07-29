@@ -112,7 +112,7 @@ class ETData:
 
     def __init__(self, df):
         self.data = np.array(df.to_records(index=False), dtype=ETData.dtype)
-        self.fs = 1000
+        self.fs = self.find_nearest_fs(self.data["t"])
         self.evt = None
 
     def load(self, fpath, **kwargs):

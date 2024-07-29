@@ -9,8 +9,6 @@ data:
   max_presaved_epochs: 99
   noise_levels:
   - 0
-  - 0.25
-  - 0.5
   training_datasets:
   - no extra
 pp_args:
@@ -23,7 +21,7 @@ pp_args:
     thres_pd: 3
     thres_isi: 25.0
     thres_sd_lo: 6.0
-    thres_sd_hi: 150.0
+    thres_sd_hi: 600.0
     thres_fd: 50.0
 jobs:
   matchers: {
@@ -49,8 +47,7 @@ jobs:
         "0": 0
     }
 log_dir: /home/martin/Documents/Exjobb/eed/.experiments
-study_name: random_forest_SEdata_synthData_1
+study_name: localTestSynthAndSEscoreOnly
 n_trials: 1000
 objective_metrics:
 - IoU_mcc
-- model_size

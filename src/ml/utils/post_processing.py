@@ -103,7 +103,7 @@ class hpp:
         #        _sdur = _evt.query('evt==2 and dur<@_sdur_thres')
 
         thres_sd_lo = kwargs["thres_sd_lo"] / 1000.0
-        thres_sd_lo_s = round_up(thres_sd_lo * fs)
+        thres_sd_lo_s = round_up(thres_sd_lo * fs,2)
 
         _sdur = _evt.query("evt==2 and (dur<@thres_sd_lo or dur_s<@thres_sd_lo_s)")
         check["short_saccades"] += len(_sdur)
@@ -258,6 +258,7 @@ def fixation_merge(df, threshold=1):
 
     # Calculate the pythagorean distances between consecutive groupings with label 1, and merge them if the distance is below the threshold
     distances = []
+    merge_counter=0
     for group_label, group_data in grouped:
         if 1 in group_data["evt"].values:
             group_indices = group_data.index
@@ -281,9 +282,11 @@ def fixation_merge(df, threshold=1):
                         last_sample_label1.name + 1, next_sample_label1.name
                     )
                     df.loc[indices_to_update, "evt"] = 1
+                    merge_counter+=1
                 distances.append(distance)
-    print("Pythagorean distances between consecutive groupings with label 1:")
-    print(distances)
+    #print("Pythagorean distances between consecutive groupings with label 1:")
+    #print(distances)
+    print(f"Merged {merge_counter} fixations due to them being closer than {threshold} degrees.")
     return df
 
 

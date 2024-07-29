@@ -21,7 +21,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 
@@ -209,8 +209,8 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
     #classifier_name = "xgboost"
     #classifier_name = "adaBoost"
     #classifier_name = "mlp"
-    classifier_name = "RandomForest"
-
+    #classifier_name = "RandomForest"
+    classifier_name = args.model
     if classifier_name == "RandomForest":
         print("RandomForest classifier selected")
         classifier_obj = RandomForestClassifier()
@@ -227,6 +227,17 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
         print("SVC classifier selected")
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
         classifier_obj = LinearSVC(C=svc_c)
+        X_train, X_val = scale_data(X_train, X_val)
+    elif classifier_name == "SGDSVM":
+        print("SGD SVM classifier selected")
+        classifier_obj = SGDClassifier(loss="hinge")
+        sgd_config = {
+            "alpha": trial.suggest_float("alpha", 1e-10, 1e10, log=True),
+            "penalty": trial.suggest_categorical("penalty", ["l1", "l2"]),
+            "n_jobs": args.data.num_workers,
+            "verbose": 3,
+        }
+        classifier_obj.set_params(**sgd_config)
         X_train, X_val = scale_data(X_train, X_val)
     elif classifier_name == "xgboost":
         print("XGBoost classifier selected")
@@ -321,9 +332,12 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
     y_hat_df = val_data.filter(["t", "x", "y", "status"])
     y_hat_df["evt"] = _pred
 
+
     assert len(y_hat_df) == len(y_val_df), "Prediction and ground truth have different lengths"
     y_hat_df = post_process(y_hat_df, args.pp_args)
     assert len(y_hat_df)!= 0, "Post processing removed all samples"
+
+    #assert sum(_pred == 0) == 0, "Predictions only contain undefined label"
 
     # Temporary removal of samples made false by post processing
     mask2 = y_hat_df["status"] == True
@@ -334,7 +348,10 @@ def objective_function(trial: optuna.trial.Trial, parser: ArgumentParser, args) 
     y_val_df.reset_index(drop=True, inplace=True)
     y_hat_df.reset_index(drop=True, inplace=True)
 
-    scores = calculate_metrics(y_val_df, y_hat_df, args.jobs)
+    if len(y_hat_df) == 0:
+        scores = [{"mcc": 0.0}]
+    else:
+        scores = calculate_metrics(y_val_df, y_hat_df, args.jobs)
     metrics = []
     for metric in args.objective_metrics:
         if metric == "IoU_mcc":
@@ -372,6 +389,8 @@ def main():
     parser.add_argument("-n", "--study_name", default="TestSweep")
     parser.add_argument("-t", "--n_trials", default=100)
     parser.add_argument("-m", "--objective_metrics", default=["IoU_mcc"])
+    parser.add_argument("--model", default="RandomForest" )
+
 
     args = parser.parse_args()
     args.jobs.event_map = utils.keys2num(args.jobs.event_map)
