@@ -70,7 +70,7 @@ def calculate_metrics(data_gt, data_pr, job):
         result_accum.extend(eval_result)
     return result_accum
 
-def make_predictions_and_save(classifier,classifier_name, X, output_df, output_dir, pp_args):
+def make_predictions_and_save(classifier,classifier_name, X, output_df, output_dir, pp_args, event_map):
     # Make predictions
     y_pred = classifier.predict(X)
 
@@ -101,11 +101,17 @@ def make_predictions_and_save(classifier,classifier_name, X, output_df, output_d
         pd_pp_df = pd_pp_df.set_index(pd_filtered_df.index)
 
         # Temporary removal of samples made false by post processing
-        mask2 = pd_pp_df["status"] == True
-        pd_pp_df = pd_pp_df[mask2]
-        gt_filtered_df = gt_filtered_df[mask2]
+        #mask2 = pd_pp_df["status"] == True
+        #pd_pp_df = pd_pp_df[mask2]
+        #gt_filtered_df = gt_filtered_df[mask2]
+        # Set label to 5 for samples that were made false by post processing
+        falseMask = pd_pp_df["status"] == False
+        pd_pp_df.loc[falseMask, "evt"] = 0
+        #gt_filtered_df.loc[falseMask, "evt"] = 0
+        gt_filtered_df["status"] = pd_pp_df["status"]
+    
 
-        job_object = job()
+        job_object = job(event_map=event_map)
         gt_filtered_df = gt_filtered_df.reset_index(drop=True)
         pd_pp_df = pd_pp_df.reset_index(drop=True)
         scores = calculate_metrics(gt_filtered_df, pd_pp_df, job_object)
@@ -292,6 +298,7 @@ def main(
         train_df,
         ".experiments/results/sklearn/train",
         pp_args=pp_args,
+        event_map=event_map
     )
     print("Predicting on validation data....")
     make_predictions_and_save(
@@ -301,6 +308,7 @@ def main(
         val_df,
         ".experiments/results/sklearn/validation",
         pp_args=pp_args,
+        event_map=event_map
     )
 
 

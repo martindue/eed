@@ -12,7 +12,7 @@ data_module:
     - 0
     training_datasets:
     - SE_recorded
-    - synthetic_data
+    #- synthetic_data
 stage: fit
 classifier_type: sklearn.ensemble.RandomForestClassifier
 rf_config:
@@ -23,7 +23,7 @@ rf_config:
   n_jobs: 15
   verbose: 3
 pp_args:
-  sacc_minimum_distance: 2
+  sacc_minimum_distance: 1
   pp_kwargs:
     thres_id: 75.0
     thres_ifa: 0.2
@@ -32,7 +32,7 @@ pp_args:
     thres_pd: 3
     thres_isi: 25.0
     thres_sd_lo: 6.0
-    thres_sd_hi: 600.0
+    thres_sd_hi: 400.0
     thres_fd: 50.0
 event_map:
   '1': 1

@@ -45,6 +45,7 @@ class job:
         binary_strategy: list = None,
         event_map: dict = None,
         label: str = None,
+        match_plot_kwargs: dict = None,
     ):
         self.matchers = matchers or {
             "maximum-overlap": {},
@@ -66,7 +67,7 @@ class job:
             "0": 100,
         }  # TODO: This is wrong, for the lookAtPoint Dataset. Change to correct values
         self.label = label or "default_label"
-
+        self.match_plot_kwargs = match_plot_kwargs or {}
 
 class pp_args:
     def __init__(
